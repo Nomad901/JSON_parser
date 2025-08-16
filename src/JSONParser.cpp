@@ -1,59 +1,120 @@
 #include "JSONParser.h"
 
-tng::JSONParser::JSONParser()
+tng::JSONException::JSONException(const char* pMessage)
 {
+	assignMessage(pMessage);
 }
 
-tng::JSONParser::JSONParser(const std::filesystem::path& pPath)
+tng::JSONException::JSONException(const std::exception& pException)
 {
+	assignMessage(pException.what());
 }
 
-tng::JSONParser::~JSONParser()
+tng::JSONException::~JSONException()
 {
+	delete[] mMessage;
 }
 
-nlohmann::json tng::JSONParser::parseToJSON(const std::filesystem::path& pPath)
+const char* tng::JSONException::what() const noexcept
 {
-	return nlohmann::json();
+	return mMessage == nullptr ? "Nothing" : mMessage;
 }
 
-nlohmann::json tng::JSONParser::parseToJSON(std::ifstream& pIfstream)
+void tng::JSONException::eraseMessage()
 {
-	return nlohmann::json();
+	if (mMessage != nullptr)
+	{
+		delete[] mMessage;
+		mMessage = nullptr;
+	}
 }
 
-void tng::JSONParser::parseJSONtoTXT(const std::filesystem::path& pPath)
+void tng::JSONException::assignMessage(const char* pMessage)
 {
+	eraseMessage();
+	auto length = sizeof(pMessage);
+	mMessage = new char[length];
+	std::strcpy(mMessage, pMessage);
 }
 
-bool tng::JSONParser::validate()
+tng::JSONValue::JSONValue(const std::initializer_list<JSONValue>& pArray)
 {
-	return false;
+	mValue = pArray;
+	mTypeVariant = typeVariant::VECTOR;
 }
 
-std::string tng::JSONParser::readFile()
+auto tng::JSONValue::at(size_t pIndex) -> JSONValue&
 {
-	return std::string();
+	if (!std::holds_alternative<std::vector<JSONValue>>(mValue))
+		throw JSONException("This class doesnt hold array! Set it via setArray()\n");
+	if(std::get<std::vector<JSONValue>>(mValue).size() < pIndex)
+		throw JSONException("Index is above than the size of the array!\n");
+
+	return std::get<std::vector<JSONValue>>(mValue)[pIndex];
 }
 
-void tng::JSONParser::writeFile(std::string_view pData)
+auto tng::JSONValue::setArray(const std::initializer_list<JSONValue>& pArray) -> void
 {
+	mValue = pArray;
+	mTypeVariant = typeVariant::VECTOR;
 }
 
-std::string tng::JSONParser::readJSONFile()
+auto tng::JSONValue::getBool() -> bool
 {
-	return std::string();
+	if (mTypeVariant != typeVariant::BOOL)
+		throw JSONException("Variant doesnt hold bool!\n");
+	return std::get<bool>(mValue);
 }
 
-void tng::JSONParser::writeJSONFile(const nlohmann::json& pData)
+auto tng::JSONValue::getInt() -> int32_t
 {
+	if (mTypeVariant != typeVariant::INT)
+		throw JSONException("Variant doesnt hold int!\n");
+	return std::get<int32_t>(mValue);
 }
 
-void tng::JSONParser::clearData()
+auto tng::JSONValue::getFloat() -> float
 {
+	if (mTypeVariant != typeVariant::FLOAT)
+		throw JSONException("Variant doesnt hold float!\n");
+	return std::get<float>(mValue);
 }
 
-nlohmann::json tng::JSONParser::getData() const noexcept
+auto tng::JSONValue::getString() -> std::string
 {
-	return nlohmann::json();
+	if (mTypeVariant != typeVariant::STRING)
+		throw JSONException("Variant doesnt hold string!\n");
+	return std::get<std::string>(mValue);
+}
+
+auto tng::JSONValue::getVector() -> const std::vector<JSONValue>&
+{
+	if (mTypeVariant != typeVariant::VECTOR)
+		throw JSONException("Variant doesnt hold vector!\n");
+	return std::get<std::vector<JSONValue>>(mValue);
+}
+
+auto tng::JSONValue::valueIsString() -> bool
+{
+	return mValue.index() == std::underlying_type_t<typeVariant>(typeVariant::STRING);
+}
+
+auto tng::JSONValue::valueIsBool() -> bool
+{
+	return mValue.index() == std::underlying_type_t<typeVariant>(typeVariant::BOOL);
+}
+
+auto tng::JSONValue::valueIsFloat() -> bool
+{
+	return mValue.index() == std::underlying_type_t<typeVariant>(typeVariant::FLOAT);
+}
+
+auto tng::JSONValue::valueIsInt() -> bool
+{
+	return mValue.index() == std::underlying_type_t<typeVariant>(typeVariant::INT);
+}
+
+auto tng::JSONValue::valueIsVector() -> bool
+{
+	return mValue.index() == std::underlying_type_t<typeVariant>(typeVariant::VECTOR);
 }
