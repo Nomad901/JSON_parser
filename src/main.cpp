@@ -3,7 +3,7 @@
 
 int main()
 {
-	tng::JSONValue instance(120);
-	std::cout << std::format("Value: {}\n", instance.getInt());
-
+	std::string resourcePath = RESOURCES_PATH;
+	tng::JSONParser parser;
+	parser.parseToJSON_object(resourcePath + "smthCool.txt");
 }
