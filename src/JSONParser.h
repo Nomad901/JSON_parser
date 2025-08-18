@@ -16,8 +16,10 @@ namespace tng
 {
 	template<typename T>
 	concept isString = std::is_same_v<std::string, T> ||
-					   std::is_same_v<const char*, T>;
-
+					   std::is_same_v<const char*, T> ||
+					   std::is_same_v<const char, T>  ||
+					   std::is_same_v<char, T>;
+						
 	template<typename T>
 	concept isIntNumber = std::is_same_v<int32_t, T>  ||
 						  std::is_same_v<int64_t, T>  ||
@@ -34,10 +36,17 @@ namespace tng
 						    std::is_same_v<long double, T>;
 
 	template<typename T>
-	concept isBoolNumber = std::is_same_v<bool, T>;
+	concept isKeyword = std::is_same_v<bool, T>;
 
 	template<typename T>
-	concept ProperValue = isString<T> || isIntNumber<T> || isFloatNumber<T> || isBoolNumber<T>;
+	concept isNull = std::is_same_v<std::nullptr_t, T>;
+
+	template<typename T>
+	concept ProperValue = isString<T>	   ||
+						  isIntNumber<T>   || 
+						  isFloatNumber<T> || 
+					      isKeyword<T>	   || 
+					      isNull<T>;
 	
 	class JSONValue
 	{
@@ -48,7 +57,7 @@ namespace tng
 			template<typename T, typename U = std::enable_if<ProperValue<T>>>
 			operator T()
 			{
-				if constexpr (isBoolNumber<T>)
+				if constexpr (isKeyword<T>)
 					return mJsonValue.getBool();
 				else if constexpr (isIntNumber<T>)
 					return mJsonValue.getInt();
@@ -67,6 +76,11 @@ namespace tng
 			requires ProperValue<T>
 		JSONValue(T&& pValue);
 		explicit JSONValue(const std::initializer_list<JSONValue>& pArray);
+		~JSONValue() = default;
+		JSONValue(const JSONValue&) = default;
+		JSONValue& operator=(const JSONValue&) = default;
+		JSONValue(JSONValue&&) = default;
+		JSONValue& operator=(JSONValue&&) = default;
 
 		//
 		// sets current value and type of this value;
@@ -134,11 +148,12 @@ namespace tng
 			INT = 1,
 			FLOAT = 2,
 			STRING = 3,
-			VECTOR = 4
+			VECTOR = 4,
+			NULLTYPE = 5
 		};
 	private:
 		std::variant<bool, int32_t, float, std::string,
-					 std::vector<JSONValue>> mValue{ 0 };
+					 std::vector<JSONValue>, std::nullptr_t> mValue{ 0 };
 		typeVariant mTypeVariant{ typeVariant::INT };
 	};
 
@@ -147,7 +162,11 @@ namespace tng
 	public:
 		JSONObject() = default;
 		JSONObject(const std::string& pKey, const JSONValue& pValue);
-
+		~JSONObject() = default;
+		JSONObject(const JSONObject&) = default;
+		JSONObject& operator=(const JSONObject&) = default;
+		JSONObject(JSONObject&&) = default;
+		JSONObject& operator=(JSONObject&&) = default;
 		//
 		// changes the name of old key on the name of new key;
 		//
@@ -169,6 +188,17 @@ namespace tng
 		//
 		bool tryMove(std::string_view pKey, const JSONValue& pValue);
 
+		//
+		// converting jsonObject to json-file format;
+		//
+		nlohmann::json toJsonFormat();
+
+		//
+		// reverse operation;
+		// converts json data into jsonObject;
+		//
+		void toObjectFormat(const nlohmann::json& pJsonData);
+			
 		//
 		// getter for value;
 		// 
@@ -197,6 +227,11 @@ namespace tng
 		// returns std::nullopt - if values is not contained in the storage;
 		//
 		std::optional<JSONValue> tryGetValue(std::string_view pKey) noexcept;
+		
+		const std::unordered_map<std::string, JSONValue>& getStorage() const noexcept;
+
+	private:
+		void toJsonFormatHelper(nlohmann::json& pData, const JSONValue& pValue);
 
 	private:
 		std::unordered_map<std::string, JSONValue> mKeyValueStrg;
@@ -231,6 +266,63 @@ namespace tng
 		char* mMessage{ nullptr };
 	};
 
+	class JSONLexer
+	{
+	private:
+		enum class TokenType;
+		struct Token;
+	public:
+		JSONLexer();
+		JSONLexer(std::string_view pText);
+		
+		void tokenize(std::string_view pText);
+		Token& nextToken();
+		
+		template<typename T>
+		requires isString<T>
+		std::string parseString(T&& pText);
+		template<typename T>
+		requires isIntNumber<T> || isFloatNumber<T>
+		std::string parseNumber(T&& pNumber);
+		template<typename T>
+		requires isKeyword<T>
+		std::string parseKeyword(T&& pText);
+
+		bool isAtEnd() const noexcept;
+
+		std::vector<Token>& getTockens() noexcept;
+	private:
+		bool isValid(std::string_view pText);
+		bool isEscapeSequence(std::string_view pText);
+		bool isWhiteSpaces(std::string_view pText);
+
+	private:
+		enum class TokenType
+		{
+			LBRACE = 0,
+			RBRACE = 1,
+			LBRACKET = 2,
+			RBRACKET = 3,
+			COMMA = 4,
+			COLON = 5,
+			STRING = 6,
+			NUMBER = 7,
+			BOOLEAN = 8,
+			SLASHN = 9,
+			SLASHT = 10
+		};
+		struct Token
+		{
+			TokenType mTokenType{ TokenType::LBRACE };
+			std::string mDefinition{};
+			int32_t mNumber{};
+			float mNumberFloat{};
+			bool mBoolean{};
+		};
+
+		std::vector<Token> mTokens;
+	};
+
 	class JSONParser
 	{
 	public:
@@ -241,47 +333,26 @@ namespace tng
 		JSONParser& operator=(JSONParser&&) = default;
 		
 		//
-		// parses .txt file to .json file via path;
-		// returns parsed JSON object;
-		//
-		nlohmann::json parseToJSON_object(const std::filesystem::path& pPath, bool pDeletePreviousFile = false);
-
-		//
-		// parses .txt file to .json file via opened streams in the constructor;
-		// returns parsed JSON object;
-		//
-		nlohmann::json parseToJSON_object(bool pDeletePreviousFile = false);
-
-		//
-		// parses .txt file to .json file via opened streams in the constructor;
-		// returns a path on new parsed file;
-		//
-		const std::filesystem::path& parseToJSON_path(bool pDeletePreviousFile = false);
-
-		//
-		// parses in inverse order: from .json file to .txt file;
-		//
-		void parseJSONtoTXT(const std::filesystem::path& pPath, bool pDeletePreviousFile = false);
+		// parses std::string to JSON file;
+  		//
+		nlohmann::json parseToJSON(std::string_view pText);
 
 		//
 		// validates data and that everything is alright, according to JSON rules;
+		// throws, if something is wrong
 		//
-		bool validateData();
+		void validateData(const std::filesystem::path& pPath);
+		void validateData(std::string_view pText);
 
 		//
 		// reads data from the file (which we converted) in string;
 		//
-		std::string readFile();
+		std::string readFile(const std::filesystem::path& pPath);
 
-		//
-		// writes data into the file via nlohman::json;
-		//
-		void writeFile(const nlohmann::json& pData);
-		
 		//
 		// writes data into the file via JSONObject class;
 		//
-		void writeFile(const JSONObject& pJSONObject);
+		void writeFile(const std::filesystem::path& pPath, const JSONObject& pJSONObject);
 
 		// 
 		// erasing all data in the converted file;
@@ -311,7 +382,7 @@ namespace tng
 		//
 		// opens fstream;
 		//
-		void openFStream(const std::filesystem::path& pPath, std::fstream& pFstream);
+		void openFStream(const std::filesystem::path& pPath, std::fstream& pFstream, std::ios_base::openmode pOpenModes);
 
 		//
 		// closes read stream;
@@ -329,21 +400,16 @@ namespace tng
 		void closeFStream(std::fstream& pFstream);
 
 		//
-		// just changes .txt file into .json file without refactoring;
-		// the condition for refactoring - is presence of json structure;
-		//
-		void usualParse();
-
-		//
-		// parses .txt file to .json file with refactoring all data;
-		//
-		void specialParse();
-
-		//
 		// checks if the path exists;
 		// defining mPath;
 		//
 		void managePath(const std::filesystem::path& pPath);
+
+		//
+		// manages data, thus the data will be looking properly,
+		// according to json-files system;
+		//
+		void manageData(const std::filesystem::path& pPath, nlohmann::json& pData);
 
 	private:
 		JSONObject mJSONObject;
@@ -358,7 +424,7 @@ namespace tng
 	{
 		if (isIntNumber<T>)
 			mTypeVariant = typeVariant::INT;
-		else if (isBoolNumber<T>)
+		else if (isKeyword<T>)
 			mTypeVariant = typeVariant::BOOL;
 		else if (isFloatNumber<T>)
 			mTypeVariant = typeVariant::FLOAT;
@@ -374,7 +440,7 @@ namespace tng
 	{
 		if (isIntNumber<setType>)
 			mTypeVariant = typeVariant::INT;
-		else if (isBoolNumber<setType>)
+		else if (isKeyword<setType>)
 			mTypeVariant = typeVariant::BOOL;
 		else if (isFloatNumber<setType>)
 			mTypeVariant = typeVariant::FLOAT;
