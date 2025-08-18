@@ -154,6 +154,49 @@ namespace tng
 		return false;
 	}
 
+	nlohmann::json JSONObject::toJsonFormat() 
+	{
+		nlohmann::json tmpJson;
+		for (auto& [key,value] : mKeyValueStrg)
+		{
+			if (value.valueIsBool())
+				tmpJson[key] = value.getBool();
+			if (value.valueIsInt())
+				tmpJson[key] = value.valueIsInt();
+			if (value.valueIsFloat())
+				tmpJson[key] = value.valueIsFloat();
+			if (value.valueIsString())
+				tmpJson[key] = value.valueIsString();
+			if (value.valueIsArray())
+			{
+				for (auto& elem : value.getArray())
+				{
+					toJsonFormatHelper(tmpJson, elem);
+				}
+			}
+		}
+		return tmpJson;
+	}
+
+	void JSONObject::toObjectFormat(const nlohmann::json& pJsonData) 
+	{
+		for (auto& [key, value] : pJsonData.items())
+		{
+			JSONValue tmpJSONValue;
+			if (value.is_boolean())
+				tmpJSONValue.setValue(value.get<bool>());
+			else if (value.is_number_integer())
+				tmpJSONValue.setValue(value.get<int32_t>());
+			else if (value.is_null())
+				tmpJSONValue.setValue(nullptr);
+			else if (value.is_number_float())
+				tmpJSONValue.setValue(value.get<float>());
+			else if (value.is_string())
+				tmpJSONValue.setValue(value.get<std::string>());
+			mKeyValueStrg.insert_or_assign(key, tmpJSONValue);
+		}
+	}
+
 	const tng::JSONValue& tng::JSONObject::getValue(std::string_view pKey) noexcept
 	{
 		if (!mKeyValueStrg.contains(std::string(pKey)))
@@ -190,7 +233,35 @@ namespace tng
 		return mKeyValueStrg[std::string(pKey)];
 	}
 
-	nlohmann::json tng::JSONParser::parseToJSON_object(const std::filesystem::path& pPath, bool pDeletePreviousFile)
+	const std::unordered_map<std::string, JSONValue>& JSONObject::getStorage() const noexcept
+	{
+		return mKeyValueStrg;
+	}
+
+	void JSONObject::toJsonFormatHelper(nlohmann::json& pData, const JSONValue& pValue)
+	{
+		for (auto& [key, value] :mKeyValueStrg)
+		{
+			if (value.valueIsBool())
+				pData[key] = value.getBool();
+			if (value.valueIsInt())
+				pData[key] = value.valueIsInt();
+			if (value.valueIsFloat())
+				pData[key] = value.valueIsFloat();
+			if (value.valueIsString())
+				pData[key] = value.valueIsString();
+			if (value.valueIsArray())
+			{
+				for (auto& elem2 : value.getArray())
+				{
+					toJsonFormatHelper(pData, elem2);
+				}
+			}
+
+		}
+	}
+
+	/*nlohmann::json tng::JSONParser::parseToJSON_object(const std::filesystem::path& pPath, bool pDeletePreviousFile)
 	{
 		std::ifstream readStream;
 		openReadStream(pPath, readStream);
@@ -216,7 +287,6 @@ namespace tng
 		for (size_t i = mPath.string().size()-5; i > 0; --i)
 		{
 			if (mPath.string()[i] == '/'  ||
-				mPath.string()[i] == '//' ||
 				mPath.string()[i] == '\\')
 			{
 				break;
@@ -234,24 +304,50 @@ namespace tng
 		openReadStream(mPath, readStream);
 		try
 		{
-			// TODO: copy text from .txt file to .json
+			uint32_t tmpCounter = 0;
+			std::string line;
+			while (std::getline(readStream, line))
+			{
+				mJSONObject.addObject("Row" + std::to_string(tmpCounter), std::string(line));
+				tmpCounter++;
+			}
+			for (auto& [key, value] : mJSONObject.getStorage())
+			{
+				mData[key] = value.getString();
+			}
 		}
 		catch (const nlohmann::json::exception& pException)
 		{
 			std::cout << std::format("Exception: {}\n", pException.what());
 		}
-		tmpWriteStream << mData;
+		tmpWriteStream << mData.dump(4);
 	}
 
 	void tng::JSONParser::specialParse()
 	{
-	}
+	}*/
 
 	void JSONParser::managePath(const std::filesystem::path& pPath)
 	{
 		if (!std::filesystem::exists(pPath))
 			throw JSONException("Path doesnt exist!\n");
 		mPath = pPath;
+	}
+
+	void JSONParser::manageData(const std::filesystem::path& pPath, nlohmann::json& pData)
+	{
+		std::ifstream readStream;
+		std::fstream writeStream;
+		openReadStream(pPath, readStream);
+		openFStream(pPath, writeStream, std::ios::app);
+		std::string finalResult;
+		std::string line;
+		while (std::getline(readStream, line))
+		{
+			if (line == "{" || line == "}" && line.size() == 1)
+				finalResult = line + "\n";
+		}
+
 	}
 
 	void JSONParser::openReadStream(const std::filesystem::path& pPath, std::ifstream& pIfstream)
@@ -270,7 +366,7 @@ namespace tng
 			throw JSONException("Couldnt open the file!\n");
 	}
 
-	void JSONParser::openFStream(const std::filesystem::path& pPath, std::fstream& pFstream)
+	void JSONParser::openFStream(const std::filesystem::path& pPath, std::fstream& pFstream, std::ios_base::openmode pOpenModes)
 	{
 		managePath(pPath);
 		pFstream.open(pPath);
@@ -294,5 +390,18 @@ namespace tng
 	{
 		if (pFstream.is_open())
 			pFstream.close();
+	}
+
+	JSONLexer::JSONLexer()
+	{
+		mTokens.reserve(100);
+	}
+	JSONLexer::JSONLexer(std::string_view pText)
+	{
+		mTokens.reserve(100);
+		tokenize(pText);
+	}
+	void JSONLexer::tokenize(std::string_view pText)
+	{
 	}
 }
