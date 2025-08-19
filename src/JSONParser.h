@@ -274,29 +274,12 @@ namespace tng
 	public:
 		JSONLexer();
 		JSONLexer(std::string_view pText);
-		
-		void tokenize(std::string_view pText);
-		Token& nextToken();
-		
-		template<typename T>
-		requires isString<T>
-		std::string parseString(T&& pText);
-		template<typename T>
-		requires isIntNumber<T> || isFloatNumber<T>
-		std::string parseNumber(T&& pNumber);
-		template<typename T>
-		requires isKeyword<T>
-		std::string parseKeyword(T&& pText);
 
-		bool isAtEnd() const noexcept;
+		std::vector<Token>& tokenize(std::string_view pText);
+		Token previousToken();
+		Token currentToken();
+		Token nextToken();
 
-		std::vector<Token>& getTockens() noexcept;
-	private:
-		bool isValid(std::string_view pText);
-		bool isEscapeSequence(std::string_view pText);
-		bool isWhiteSpaces(std::string_view pText);
-
-	private:
 		enum class TokenType
 		{
 			LBRACE = 0,
@@ -307,9 +290,11 @@ namespace tng
 			COLON = 5,
 			STRING = 6,
 			NUMBER = 7,
-			BOOLEAN = 8,
+			KEYWORD = 8,
 			SLASHN = 9,
-			SLASHT = 10
+			SLASHT = 10,
+			MINUS = 11,
+			PLUS = 12
 		};
 		struct Token
 		{
@@ -320,6 +305,42 @@ namespace tng
 			bool mBoolean{};
 		};
 
+	private:
+
+		//
+		// returns previous character;
+		//
+		char inverseAdvance();
+
+		//
+		// returns next character;
+		//
+		char advance();
+
+		//
+		// returns current char;
+		//
+		char peek() const;
+
+		void scan();
+
+		bool isAtEnd() const noexcept;
+
+		void parseString();
+		void parseNumber();
+		char parseEsacpeSequence();
+		char parseKeyword(std::string_view pWordExpected);
+
+		void addToken(TokenType pTokenType);
+
+		bool isValid();
+
+		void error(std::string_view pMessage);
+
+	private:
+		int32_t mCurrentPosInput{};
+		int32_t mCurrentToken{};
+		std::string mInput;
 		std::vector<Token> mTokens;
 	};
 
