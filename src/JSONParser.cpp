@@ -392,16 +392,196 @@ namespace tng
 			pFstream.close();
 	}
 
+	//
+	// JSONLexer
+	//
 	JSONLexer::JSONLexer()
 	{
 		mTokens.reserve(100);
 	}
+
 	JSONLexer::JSONLexer(std::string_view pText)
 	{
 		mTokens.reserve(100);
 		tokenize(pText);
 	}
-	void JSONLexer::tokenize(std::string_view pText)
+
+	std::vector<JSONLexer::Token>& JSONLexer::tokenize(std::string_view pText)
 	{
+		mInput = pText;
+		while (!isAtEnd())
+		{
+			scan();
+		}
+		if (!isValid())
+			throw JSONException("The text is not valid!\n");
+		return mTokens;
+	}
+
+	JSONLexer::Token JSONLexer::previousToken()
+	{
+		Token tmpTokenSafe;
+		if (mCurrentToken <= 0)
+		{
+			std::cout << "Current token is 0!\n";
+			return tmpTokenSafe;
+		}
+		else if (mTokens.empty())
+		{
+			std::cout << "Storage of tokens is empty!\n";
+			return tmpTokenSafe;
+		}
+		return mTokens[mCurrentToken - 1];
+	}
+
+	JSONLexer::Token JSONLexer::currentToken()
+	{
+		if (mCurrentToken >= mTokens.size())
+		{
+			JSONLexer::Token tmpSafeToken;
+			std::cout << "Current token is the end of the storage!\n";
+			return tmpSafeToken;
+		}
+		return mTokens[mCurrentPosInput];
+	}
+
+	JSONLexer::Token JSONLexer::nextToken()
+	{
+		JSONLexer::Token tmpSafeToken;
+		if (mCurrentToken >= mTokens.size() && mCurrentPosInput + 1 >= mTokens.size())
+		{
+			std::cout << "Current token at the end already!\n";
+			return tmpSafeToken;
+		}
+		return mTokens[mCurrentPosInput + 1];
+	}
+
+	void JSONLexer::addToken(TokenType pTokenType)
+	{
+		JSONLexer::Token tmpToken;
+		tmpToken.mTokenType = pTokenType;
+		mTokens.push_back(tmpToken);
+	}
+
+	bool JSONLexer::isValid()
+	{
+		return mTokens[0].mTokenType == TokenType::LBRACE &&
+			   mTokens[mTokens.size() - 1].mTokenType == TokenType::RBRACE;
+	}
+
+	void JSONLexer::error(std::string_view pMessage)
+	{
+		std::cout << std::format("Error! [MESSAGE] {}\n", pMessage);
+		exit(1);
+	}
+	char JSONLexer::inverseAdvance()
+	{
+		if (mInput.empty())
+		{
+			std::cout << "Text is empty!\n";
+			return ' ';
+		}
+		if (mCurrentPosInput - 1 < 0)
+		{
+			std::cout << "Can not get the previous character, because the current position is zero!\n";
+			return ' ';
+		}
+		char c = mInput[mCurrentPosInput--];
+		return c;
+	}
+	char JSONLexer::advance()
+	{
+		if (isAtEnd()) return '\0';
+		if (mCurrentPosInput + 1 >= mInput.size())
+			return ' ';
+		char c = mInput[mCurrentPosInput++];
+		mCurrentPosInput++;
+		return c;
+	}
+	char JSONLexer::peek() const
+	{
+		if (isAtEnd()) return '\0';
+		return mInput[mCurrentPosInput];
+	}
+	void JSONLexer::scan()
+	{
+		char c = advance();
+		switch (c)
+		{
+		case '{': addToken(TokenType::LBRACE); break;
+		case '}': addToken(TokenType::RBRACE); break;
+		case '[': addToken(TokenType::LBRACKET); break;
+		case ']': addToken(TokenType::RBRACKET); break;
+		case ':': addToken(TokenType::COLON); break;
+		case ',': addToken(TokenType::COMMA); break;
+		case '0' || '1' || '2' || '3' || 
+			 '4' || '5' || '6' || '7' || 
+			 '8' || '9' || '-' || '+': parseNumber(); break;
+		case '"': parseString(); break;
+		case 't': parseKeyword("true"); break;
+		case 'f': parseKeyword("false"); break;
+		case 'n': parseKeyword("null"); break;			
+		default:
+			error("Unexpected character");
+		}
+	}
+	bool JSONLexer::isAtEnd() const noexcept
+	{
+		return mInput[mCurrentPosInput] == '}';
+	}
+	char JSONLexer::parseEsacpeSequence()
+	{
+		advance(); 
+		switch (advance())
+		{
+		case '\\': return '\\';
+		case '"': return '"';
+		case 'b': return '\b';
+		case 'f': return '\f';
+		case 'n': return '\n';
+		case 'r': return '\r';
+		case 't': return '\t';
+		default:
+			error("Invalid character!\n");
+		}
+		std::unreachable();
+	}
+	void JSONLexer::parseString()
+	{
+		std::string tmpString;
+		tmpString = peek();
+		while (peek() != ' ' && !isAtEnd())
+		{
+			if (peek() == '\\')
+				tmpString += parseEsacpeSequence();
+			else
+				tmpString += advance();
+		}
+		addToken(TokenType::STRING);
+		mTokens[mTokens.size() - 1].mDefinition = tmpString;
+	}
+	void JSONLexer::parseNumber()
+	{
+		char c = peek();
+		std::string finalNumber;
+		if (c == '-')
+		{
+			addToken(TokenType::MINUS);
+			finalNumber.push_back(c);
+			c = advance();
+		}
+		while (!std::isdigit(c) || c == '.')
+		{
+			finalNumber.push_back(c);
+			c = advance();
+		}
+		addToken(TokenType::NUMBER);
+		mTokens[mTokens.size() - 1].mDefinition = finalNumber;
+	}
+	char JSONLexer::parseKeyword(std::string_view pWordExpected)
+	{
+		mCurrentPosInput += pWordExpected.size();
+		addToken(TokenType::KEYWORD);
+		mTokens[mTokens.size() - 1].mDefinition = pWordExpected;		
 	}
 }
