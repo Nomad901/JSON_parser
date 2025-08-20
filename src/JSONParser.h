@@ -167,6 +167,7 @@ namespace tng
 		JSONObject& operator=(const JSONObject&) = default;
 		JSONObject(JSONObject&&) = default;
 		JSONObject& operator=(JSONObject&&) = default;
+
 		//
 		// changes the name of old key on the name of new key;
 		//
@@ -273,13 +274,54 @@ namespace tng
 		struct Token;
 	public:
 		JSONLexer();
+
+		//
+		// invokes tokenize function via the passed pText;
+		//
 		JSONLexer(std::string_view pText);
 
+		//
+		// has some important checks on valid text and scans the text;
+		//
 		std::vector<Token>& tokenize(std::string_view pText);
-		Token previousToken();
-		Token currentToken();
-		Token nextToken();
 
+		//
+		// iterators for storage of tokens
+		// -------------------------------
+
+		//
+		// returns previous token of storage of tokensv
+		//
+		Token previousToken();
+
+		//
+		// returns current token of storage of tokens;
+		//
+		Token currentToken();
+
+		//
+		// returns next token of storage of tokens;
+		//
+		Token nextToken();
+		// -------------------------------
+
+		//
+		// returns a token type of the token automatically;
+		// there are no needs to write checks on your own;
+		//
+		// first function will return a type of the current token;
+		// second function will return a type of a token, which the user can pass;
+		std::string getTokenType();
+		std::string getTokenType(const Token& pToken);
+
+		//
+		// returns size of storage of tokens(or just number of tokens in general);
+		//
+		size_t getNumberTokens() const noexcept; 
+
+		//
+		// types of tokens;
+		//
 		enum class TokenType
 		{
 			LBRACE = 0,
@@ -294,15 +336,17 @@ namespace tng
 			SLASHN = 9,
 			SLASHT = 10,
 			MINUS = 11,
-			PLUS = 12
+			PLUS = 12,
+			SPACE = 13
 		};
+		
+		//
+		// token structure which contains type and definition(string) of tokens;
+		//
 		struct Token
 		{
 			TokenType mTokenType{ TokenType::LBRACE };
 			std::string mDefinition{};
-			int32_t mNumber{};
-			float mNumberFloat{};
-			bool mBoolean{};
 		};
 
 	private:
@@ -322,25 +366,63 @@ namespace tng
 		//
 		char peek() const;
 
+		//
+		// returns a char before the current;
+		//
+		char inversePeek();
+
+		//
+		// the main function which does the whole dirty work;
+		//
 		void scan();
 
+		//
+		// checks if the iterator on the end of the passed string;
+		//
 		bool isAtEnd() const noexcept;
 
+		//
+		// parsing functions. Each function does its own thing, but the
+		// main point - these functions parse the text;
+		// ------------------------------------------------
 		void parseString();
 		void parseNumber();
-		char parseEsacpeSequence();
-		char parseKeyword(std::string_view pWordExpected);
+		void parseKeyword(std::string_view pWordExpected);
+		char parseEscapeSequence();
+		// ------------------------------------------------
 
-		void addToken(TokenType pTokenType);
+		//
+		// automatically adds a token into storage of tokens;
+		//
+		void addToken(TokenType pTokenType, std::string_view pDefinition);
 
+		//
+		// checks if the beginning of the text is left brace and the end is right brace;
+		//
 		bool isValid();
 
-		void error(std::string_view pMessage);
+		//
+		// helper function for the function: getTokenType();
+		// was made for eliminating copy-paste code;
+		// 
+		std::string helperForTokenTypes(const Token& pToken) const;
+
+		//
+		// there is a small bag, which is not critical, but after numbers 
+		// the lexer cant read another next symbol. this function just appends
+		// after each number a space;
+		//
+		void analizerSpaces();
+
+		//
+		// just a simplified log-function;
+		//
+		void error(std::string_view pMessagem);
 
 	private:
 		int32_t mCurrentPosInput{};
 		int32_t mCurrentToken{};
-		std::string mInput;
+		std::string mInput{};
 		std::vector<Token> mTokens;
 	};
 
@@ -352,7 +434,7 @@ namespace tng
 		JSONParser& operator=(const JSONParser&) = default;
 		JSONParser(JSONParser&&) = default;
 		JSONParser& operator=(JSONParser&&) = default;
-		
+
 		//
 		// parses std::string to JSON file;
   		//
