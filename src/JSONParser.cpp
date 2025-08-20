@@ -402,24 +402,33 @@ namespace tng
 
 	JSONLexer::JSONLexer(std::string_view pText)
 	{
-		mTokens.reserve(100);
+		mTokens.reserve(pText.size() + 10);
 		tokenize(pText);
 	}
 
 	std::vector<JSONLexer::Token>& JSONLexer::tokenize(std::string_view pText)
 	{
-		mInput = pText;
-		while (!isAtEnd())
+		if ((!pText.empty() && pText.size() >= 2) &&
+			(*pText.begin() == '{' && *(pText.end() - 1) == '}'))
 		{
-			scan();
+			mInput = pText;
+			analizerSpaces();
+			while (!isAtEnd())
+			{
+				scan();
+			}
+			if (!isValid())
+				throw JSONException("The text is not valid!\n");
+			return mTokens;
 		}
-		if (!isValid())
+		else
 			throw JSONException("The text is not valid!\n");
-		return mTokens;
 	}
 
 	JSONLexer::Token JSONLexer::previousToken()
 	{
+		assert(!mInput.empty());
+
 		Token tmpTokenSafe;
 		if (mCurrentToken <= 0)
 		{
@@ -431,36 +440,50 @@ namespace tng
 			std::cout << "Storage of tokens is empty!\n";
 			return tmpTokenSafe;
 		}
-		return mTokens[mCurrentToken - 1];
+		mCurrentToken--;
+		return mTokens[mCurrentToken];
 	}
 
 	JSONLexer::Token JSONLexer::currentToken()
 	{
+		assert(!mInput.empty());
+
 		if (mCurrentToken >= mTokens.size())
 		{
 			JSONLexer::Token tmpSafeToken;
 			std::cout << "Current token is the end of the storage!\n";
 			return tmpSafeToken;
 		}
-		return mTokens[mCurrentPosInput];
+		return mTokens[mCurrentToken];
 	}
 
 	JSONLexer::Token JSONLexer::nextToken()
 	{
+		assert(!mInput.empty());
+
 		JSONLexer::Token tmpSafeToken;
-		if (mCurrentToken >= mTokens.size() && mCurrentPosInput + 1 >= mTokens.size())
+		if (mCurrentToken >= mTokens.size() && mCurrentToken + 1 >= mTokens.size())
 		{
 			std::cout << "Current token at the end already!\n";
 			return tmpSafeToken;
 		}
-		return mTokens[mCurrentPosInput + 1];
+		mCurrentToken++;
+		return mTokens[mCurrentToken];
 	}
 
-	void JSONLexer::addToken(TokenType pTokenType)
+	std::string JSONLexer::getTokenType()
 	{
-		JSONLexer::Token tmpToken;
-		tmpToken.mTokenType = pTokenType;
-		mTokens.push_back(tmpToken);
+		return helperForTokenTypes(currentToken());
+	}
+
+	std::string JSONLexer::getTokenType(const Token& pToken)
+	{
+		return helperForTokenTypes(pToken);
+	}
+
+	size_t JSONLexer::getNumberTokens() const noexcept
+	{
+		return mTokens.size();
 	}
 
 	bool JSONLexer::isValid()
@@ -469,10 +492,77 @@ namespace tng
 			   mTokens[mTokens.size() - 1].mTokenType == TokenType::RBRACE;
 	}
 
+	std::string JSONLexer::helperForTokenTypes(const Token& pToken) const
+	{
+		switch (pToken.mTokenType)
+		{
+		case tng::JSONLexer::TokenType::LBRACE:
+			return "LBRACE";
+			break;
+		case tng::JSONLexer::TokenType::RBRACE:
+			return "RBRACE";
+			break;
+		case tng::JSONLexer::TokenType::LBRACKET:
+			return "LBRACKET";
+			break;
+		case tng::JSONLexer::TokenType::RBRACKET:
+			return "RBRACKET";
+			break;
+		case tng::JSONLexer::TokenType::COMMA:
+			return "COMMA";
+			break;
+		case tng::JSONLexer::TokenType::COLON:
+			return "COLON";
+			break;
+		case tng::JSONLexer::TokenType::STRING:
+			return "STRING";
+			break;
+		case tng::JSONLexer::TokenType::NUMBER:
+			return "NUMBER";
+			break;
+		case tng::JSONLexer::TokenType::KEYWORD:
+			return "KEYWORD";
+			break;
+		case tng::JSONLexer::TokenType::SLASHN:
+			return "SLASHN";
+			break;
+		case tng::JSONLexer::TokenType::SLASHT:
+			return "SLASHT";
+			break;
+		case tng::JSONLexer::TokenType::MINUS:
+			return "MINUS";
+			break;
+		case tng::JSONLexer::TokenType::PLUS:
+			return "PLUS";
+			break;
+		case tng::JSONLexer::TokenType::SPACE:
+			return "SPACE";
+			break;
+		default:
+			throw JSONException("The type of this token doesnt exist!");
+		}
+	}
+
+	void JSONLexer::analizerSpaces()
+	{
+		size_t sizeInput = mInput.size();
+		for (size_t i = 0; i < sizeInput; ++i)
+		{
+			if (std::isdigit(mInput[i]) && 
+			   !std::isdigit(mInput[i+1]) && 
+					   mInput[i+1] != '.' &&
+					   mInput[i+1] != '\0'&&
+				       mInput[i+1] != '}')
+			{
+				mInput.insert(i+1, " ");
+			}
+		}
+	}
+
 	void JSONLexer::error(std::string_view pMessage)
 	{
-		std::cout << std::format("Error! [MESSAGE] {}\n", pMessage);
-		exit(1);
+		std::string errorMsg = std::format("Error! [MESSAGE] {} [CURRENT_POS_STRING] {}\n", pMessage, mCurrentPosInput);
+		throw JSONException(errorMsg.c_str());
 	}
 	char JSONLexer::inverseAdvance()
 	{
@@ -491,51 +581,87 @@ namespace tng
 	}
 	char JSONLexer::advance()
 	{
-		if (isAtEnd()) return '\0';
+		if (isAtEnd() || mCurrentPosInput > mInput.size()) return '\0';
 		if (mCurrentPosInput + 1 >= mInput.size())
-			return ' ';
+			return '\0';
 		char c = mInput[mCurrentPosInput++];
-		mCurrentPosInput++;
 		return c;
 	}
 	char JSONLexer::peek() const
 	{
-		if (isAtEnd()) return '\0';
+		if (isAtEnd() || mCurrentPosInput > mInput.size()) return '\0';
 		return mInput[mCurrentPosInput];
+	}
+	char JSONLexer::inversePeek() 
+	{
+		if (isAtEnd()) return '\0';
+		if(mCurrentPosInput > 0)
+			return mInput[--mCurrentPosInput];
 	}
 	void JSONLexer::scan()
 	{
 		char c = advance();
 		switch (c)
 		{
-		case '{': addToken(TokenType::LBRACE); break;
-		case '}': addToken(TokenType::RBRACE); break;
-		case '[': addToken(TokenType::LBRACKET); break;
-		case ']': addToken(TokenType::RBRACKET); break;
-		case ':': addToken(TokenType::COLON); break;
-		case ',': addToken(TokenType::COMMA); break;
-		case '0' || '1' || '2' || '3' || 
-			 '4' || '5' || '6' || '7' || 
-			 '8' || '9' || '-' || '+': parseNumber(); break;
+		case '{': addToken(TokenType::LBRACE, "{"); break;
+		case '}': addToken(TokenType::RBRACE, "}"); break;
+		case '[': addToken(TokenType::LBRACKET, "["); break;
+		case ']': addToken(TokenType::RBRACKET, "]"); break;
+		case ':': addToken(TokenType::COLON, ":"); break;
+		case ',': addToken(TokenType::COMMA, ","); break;
+		case '0': parseNumber(); break;
+		case '1': parseNumber(); break;
+		case '2': parseNumber(); break;
+		case '3': parseNumber(); break;
+		case '4': parseNumber(); break;
+		case '5': parseNumber(); break;
+		case '6': parseNumber(); break;
+		case '7': parseNumber(); break;
+		case '8': parseNumber(); break;
+		case '9': parseNumber(); break;
+		case '-': parseNumber(); break;
+		case '+': parseNumber(); break;
 		case '"': parseString(); break;
-		case 't': parseKeyword("true"); break;
-		case 'f': parseKeyword("false"); break;
-		case 'n': parseKeyword("null"); break;			
+		case 't':
+			if(mInput[mCurrentPosInput+1] == 'r')
+				parseKeyword("true"); 
+			break;
+		case 'f': 
+			if(mInput[mCurrentPosInput+1] == 'a')
+				parseKeyword("false");
+			break;
+		case 'n': 
+			if(mInput[mCurrentPosInput+1] == 'u')
+				parseKeyword("null"); 
+			break;
+		case ' ': addToken(TokenType::SPACE, " "); break;
+		case '\n': addToken(TokenType::SLASHN, "\n"); break;
+		case '\t': addToken(TokenType::SLASHT, "\t"); break;
+		case '\0': addToken(TokenType::RBRACE, "}"); break;
 		default:
-			error("Unexpected character");
+			parseString();
 		}
 	}
+
 	bool JSONLexer::isAtEnd() const noexcept
 	{
-		return mInput[mCurrentPosInput] == '}';
+		if (!mTokens.empty() && mCurrentPosInput < mInput.size())
+		{
+			return mInput[mCurrentPosInput] == '\0' ||
+				  (mTokens.end() - 1)->mTokenType == TokenType::RBRACE;
+		}
+		return false;
 	}
-	char JSONLexer::parseEsacpeSequence()
+
+	char JSONLexer::parseEscapeSequence()
 	{
+		int32_t tmpOldPosInput = mCurrentPosInput;
+
 		advance(); 
 		switch (advance())
 		{
 		case '\\': return '\\';
-		case '"': return '"';
+		case '"': return '\"';
 		case 'b': return '\b';
 		case 'f': return '\f';
 		case 'n': return '\n';
@@ -545,43 +671,66 @@ namespace tng
 			error("Invalid character!\n");
 		}
 		std::unreachable();
+
+		mCurrentPosInput = tmpOldPosInput;
 	}
+	
+	void JSONLexer::addToken(TokenType pTokenType, std::string_view pDefinition)
+	{
+		JSONLexer::Token tmpToken;
+		tmpToken.mTokenType = pTokenType;
+		tmpToken.mDefinition = pDefinition;
+		mTokens.push_back(tmpToken);
+	}
+
 	void JSONLexer::parseString()
 	{
 		std::string tmpString;
-		tmpString = peek();
-		while (peek() != ' ' && !isAtEnd())
+		while (peek() != '\"' && !isAtEnd())
 		{
 			if (peek() == '\\')
-				tmpString += parseEsacpeSequence();
+				tmpString += parseEscapeSequence();
 			else
 				tmpString += advance();
 		}
-		addToken(TokenType::STRING);
+		if (peek() == '\"')
+			advance();
+		addToken(TokenType::STRING, tmpString);
 		mTokens[mTokens.size() - 1].mDefinition = tmpString;
 	}
 	void JSONLexer::parseNumber()
 	{
-		char c = peek();
+		static bool firstTime = true;
+		char c = inversePeek();
 		std::string finalNumber;
-		if (c == '-')
-		{
-			addToken(TokenType::MINUS);
-			finalNumber.push_back(c);
-			c = advance();
-		}
-		while (!std::isdigit(c) || c == '.')
+		if (c == '-' || c == '+')
 		{
 			finalNumber.push_back(c);
 			c = advance();
+			c = advance();
+			firstTime = false;
 		}
-		addToken(TokenType::NUMBER);
-		mTokens[mTokens.size() - 1].mDefinition = finalNumber;
+		while (std::isdigit(c) || c == '.')
+		{
+			finalNumber.push_back(c);
+			c = advance();
+			if (firstTime)
+			{
+				c = advance();
+				firstTime = false;
+			}
+			if (c == '\0' || c == '}')
+				break;
+		}
+		firstTime = true;
+		addToken(TokenType::NUMBER, finalNumber);
+		if (c == '}')
+			addToken(TokenType::RBRACE, "}");
 	}
-	char JSONLexer::parseKeyword(std::string_view pWordExpected)
+	void JSONLexer::parseKeyword(std::string_view pWordExpected)
 	{
 		mCurrentPosInput += pWordExpected.size();
-		addToken(TokenType::KEYWORD);
+		addToken(TokenType::KEYWORD, std::string(pWordExpected));
 		mTokens[mTokens.size() - 1].mDefinition = pWordExpected;		
 	}
 }
