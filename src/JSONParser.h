@@ -333,11 +333,10 @@ namespace tng
 			STRING = 6,
 			NUMBER = 7,
 			KEYWORD = 8,
-			SLASHN = 9,
-			SLASHT = 10,
-			MINUS = 11,
-			PLUS = 12,
-			SPACE = 13
+			MINUS = 9,
+			PLUS = 10,
+			SPACE = 11,
+			ESCAPESEQ = 12
 		};
 		
 		//
@@ -390,6 +389,11 @@ namespace tng
 		void parseKeyword(std::string_view pWordExpected);
 		char parseEscapeSequence();
 		// ------------------------------------------------
+		
+		//
+		// checks if a char - is an escape symbol, like "\n","\t" and so on;
+		//
+		bool isEscapeChar(char pChar);
 
 		//
 		// automatically adds a token into storage of tokens;
@@ -425,6 +429,17 @@ namespace tng
 		std::string mInput{};
 		std::vector<Token> mTokens;
 	};
+
+	//class JSONLexerTest : public ::testing::Test
+	//{
+	//public:
+
+	//	void SetUp() override;
+	//	void TearDown() override;
+
+	//private:
+	//	tng::JSONLexer mLexer;
+	//};
 
 	class JSONParser
 	{

@@ -523,11 +523,8 @@ namespace tng
 		case tng::JSONLexer::TokenType::KEYWORD:
 			return "KEYWORD";
 			break;
-		case tng::JSONLexer::TokenType::SLASHN:
-			return "SLASHN";
-			break;
-		case tng::JSONLexer::TokenType::SLASHT:
-			return "SLASHT";
+		case tng::JSONLexer::TokenType::ESCAPESEQ:
+			return "ESCAPESEQ";
 			break;
 		case tng::JSONLexer::TokenType::MINUS:
 			return "MINUS";
@@ -552,9 +549,13 @@ namespace tng
 			   !std::isdigit(mInput[i+1]) && 
 					   mInput[i+1] != '.' &&
 					   mInput[i+1] != '\0'&&
-				       mInput[i+1] != '}')
+				       mInput[i+1] != '}' &&
+					   mInput[i+1] != 'e' &&
+				       mInput[i+1] != '-' &&
+					   mInput[i + 1] != '+')
 			{
 				mInput.insert(i+1, " ");
+				sizeInput++;
 			}
 		}
 	}
@@ -635,10 +636,11 @@ namespace tng
 				parseKeyword("null"); 
 			break;
 		case ' ': addToken(TokenType::SPACE, " "); break;
-		case '\n': addToken(TokenType::SLASHN, "\n"); break;
-		case '\t': addToken(TokenType::SLASHT, "\t"); break;
+		case '\n': parseEscapeSequence(); break;
+		case '\t': parseEscapeSequence(); break;
 		case '\0': addToken(TokenType::RBRACE, "}"); break;
 		default:
+			inverseAdvance();
 			parseString();
 		}
 	}
@@ -655,26 +657,51 @@ namespace tng
 
 	char JSONLexer::parseEscapeSequence()
 	{
-		int32_t tmpOldPosInput = mCurrentPosInput;
-
-		advance(); 
-		switch (advance())
+		switch (peek())
 		{
-		case '\\': return '\\';
-		case '"': return '\"';
-		case 'b': return '\b';
-		case 'f': return '\f';
-		case 'n': return '\n';
-		case 'r': return '\r';
-		case 't': return '\t';
+		case '\\':
+			addToken(TokenType::ESCAPESEQ, "\\");
+			return '\\';
+		case '\"': 
+			addToken(TokenType::ESCAPESEQ, "\"");
+			return '\"';
+		case '\b': 
+			addToken(TokenType::ESCAPESEQ, "\b");
+			return '\b';
+		case '\f': 
+			addToken(TokenType::ESCAPESEQ, "\f");
+			return '\f';
+		case '\n': 
+			addToken(TokenType::ESCAPESEQ, "\n");
+			return '\n';
+		case '\r': 
+			addToken(TokenType::ESCAPESEQ, "\r");
+			return '\r';
+		case '\t': 
+			addToken(TokenType::ESCAPESEQ, "\t");
+			return '\t';
 		default:
 			error("Invalid character!\n");
 		}
 		std::unreachable();
-
-		mCurrentPosInput = tmpOldPosInput;
 	}
 	
+	bool JSONLexer::isEscapeChar(char pChar)
+	{
+		switch (pChar)
+		{
+		case '\\': return true;
+		case '\"': return  true;
+		case '\b': return  true;
+		case '\f': return  true;
+		case '\n': return  true;
+		case '\r': return  true;
+		case '\t': return  true;
+		default:
+			return false;
+		}
+	}
+
 	void JSONLexer::addToken(TokenType pTokenType, std::string_view pDefinition)
 	{
 		JSONLexer::Token tmpToken;
@@ -686,10 +713,18 @@ namespace tng
 	void JSONLexer::parseString()
 	{
 		std::string tmpString;
-		while (peek() != '\"' && !isAtEnd())
+		while (peek() != '\"' &&
+			   peek() != '}' &&
+			  !isAtEnd())
 		{
-			if (peek() == '\\')
-				tmpString += parseEscapeSequence();
+			if (isEscapeChar(peek()))
+			{
+				addToken(TokenType::STRING, tmpString);
+				mTokens[mTokens.size() - 1].mDefinition = tmpString;
+				parseEscapeSequence();
+				advance();
+				tmpString = advance();
+			}
 			else
 				tmpString += advance();
 		}
@@ -703,13 +738,18 @@ namespace tng
 		static bool firstTime = true;
 		char c = inversePeek();
 		std::string finalNumber;
-		if (c == '-' || c == '+')
-		{
-			finalNumber.push_back(c);
-			c = advance();
-			c = advance();
-			firstTime = false;
-		}
+		auto symbolChecker = [&](char& c)
+			{
+				if (c == '-' || c == '+' || c == 'e')
+				{
+					finalNumber.push_back(c);
+					if(firstTime)
+						c = advance();
+					c = advance();
+					firstTime = false;
+				}
+			};
+		symbolChecker(c);
 		while (std::isdigit(c) || c == '.')
 		{
 			finalNumber.push_back(c);
@@ -721,6 +761,7 @@ namespace tng
 			}
 			if (c == '\0' || c == '}')
 				break;
+			symbolChecker(c);
 		}
 		firstTime = true;
 		addToken(TokenType::NUMBER, finalNumber);
