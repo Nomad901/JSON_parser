@@ -352,7 +352,8 @@ namespace tng
 			MINUS = 9,
 			PLUS = 10,
 			SPACE = 11,
-			ESCAPESEQ = 12
+			ESCAPESEQ = 12,
+			UNICODE = 13
 		};
 		
 		//
@@ -403,6 +404,7 @@ namespace tng
 		void parseString();
 		void parseNumber(char pChar);
 		void parseKeyword(std::string_view pWordExpected);
+		void parseUnicode();
 		char parseEscapeSequence(char pChar);
 		// ------------------------------------------------
 		
