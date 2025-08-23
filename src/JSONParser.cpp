@@ -413,6 +413,7 @@ namespace tng
 		{
 			mInput = pText;
 			analizerSpaces();
+			setQuotes(mInput);
 			while (!isAtEnd())
 			{
 				scan();
@@ -610,34 +611,34 @@ namespace tng
 		case ']': addToken(TokenType::RBRACKET, "]"); break;
 		case ':': addToken(TokenType::COLON, ":"); break;
 		case ',': addToken(TokenType::COMMA, ","); break;
-		case '0': parseNumber(); break;
-		case '1': parseNumber(); break;
-		case '2': parseNumber(); break;
-		case '3': parseNumber(); break;
-		case '4': parseNumber(); break;
-		case '5': parseNumber(); break;
-		case '6': parseNumber(); break;
-		case '7': parseNumber(); break;
-		case '8': parseNumber(); break;
-		case '9': parseNumber(); break;
-		case '-': parseNumber(); break;
-		case '+': parseNumber(); break;
+		case '0': parseNumber(c); break;
+		case '1': parseNumber(c); break;
+		case '2': parseNumber(c); break;
+		case '3': parseNumber(c); break;
+		case '4': parseNumber(c); break;
+		case '5': parseNumber(c); break;
+		case '6': parseNumber(c); break;
+		case '7': parseNumber(c); break;
+		case '8': parseNumber(c); break;
+		case '9': parseNumber(c); break;
+		case '-': parseNumber(c); break;
+		case '+': parseNumber(c); break;
 		case '"': parseString(); break;
 		case 't':
-			if(mInput[mCurrentPosInput+1] == 'r')
+			if(mInput[mCurrentPosInput] == 'r')
 				parseKeyword("true"); 
 			break;
 		case 'f': 
-			if(mInput[mCurrentPosInput+1] == 'a')
+			if(mInput[mCurrentPosInput] == 'a')
 				parseKeyword("false");
 			break;
 		case 'n': 
-			if(mInput[mCurrentPosInput+1] == 'u')
+			if(mInput[mCurrentPosInput] == 'u')
 				parseKeyword("null"); 
 			break;
 		case ' ': addToken(TokenType::SPACE, " "); break;
-		case '\n': parseEscapeSequence(); break;
-		case '\t': parseEscapeSequence(); break;
+		case '\n': parseEscapeSequence(c); break;
+		case '\t': parseEscapeSequence(c); break;
 		case '\0': addToken(TokenType::RBRACE, "}"); break;
 		default:
 			inverseAdvance();
@@ -655,9 +656,9 @@ namespace tng
 		return false;
 	}
 
-	char JSONLexer::parseEscapeSequence()
+	char JSONLexer::parseEscapeSequence(char pChar)
 	{
-		switch (peek())
+		switch (pChar)
 		{
 		case '\\':
 			addToken(TokenType::ESCAPESEQ, "\\");
@@ -721,7 +722,7 @@ namespace tng
 			{
 				addToken(TokenType::STRING, tmpString);
 				mTokens[mTokens.size() - 1].mDefinition = tmpString;
-				parseEscapeSequence();
+				parseEscapeSequence(peek());
 				advance();
 				tmpString = advance();
 			}
@@ -733,10 +734,10 @@ namespace tng
 		addToken(TokenType::STRING, tmpString);
 		mTokens[mTokens.size() - 1].mDefinition = tmpString;
 	}
-	void JSONLexer::parseNumber()
+	void JSONLexer::parseNumber(char pChar)
 	{
 		static bool firstTime = true;
-		char c = inversePeek();
+		char c = pChar;
 		std::string finalNumber;
 		auto symbolChecker = [&](char& c)
 			{
@@ -768,10 +769,46 @@ namespace tng
 		if (c == '}')
 			addToken(TokenType::RBRACE, "}");
 	}
+
 	void JSONLexer::parseKeyword(std::string_view pWordExpected)
 	{
-		mCurrentPosInput += pWordExpected.size();
+		mCurrentPosInput += pWordExpected.size() - 1;
 		addToken(TokenType::KEYWORD, std::string(pWordExpected));
 		mTokens[mTokens.size() - 1].mDefinition = pWordExpected;		
 	}
+
+	void JSONLexer::setQuotes(std::string& pString)
+	{
+		std::string partText;
+		for (size_t i = 0; i < pString.size() - 1; ++i)
+		{
+			if (std::isalpha(pString[i]))
+				partText += pString[i];
+			else
+			{
+				if (!partText.empty())
+				{
+					std::transform(partText.begin(), partText.end(), partText.begin(), ::tolower);
+					if (partText != "null" ||
+						partText != "true" ||
+						partText != "false")
+					{
+						pString.insert(i - partText.size(), "\"");
+						pString.insert(i, "\"");
+					}
+					partText.clear();
+				}
+			}
+		}
+	}
 }
+			/*if (std::isalpha(pString[i + 1]) && !std::isalpha(pString[i]))
+			{
+				pString.insert(i + 1, "\"");
+				i++;
+			}
+			else if (std::isalpha(pString[i]) && !std::isalpha(pString[i + 1]))
+			{
+				pString.insert(i+1, "\"");
+				i++;
+			}*/

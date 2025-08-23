@@ -1,17 +1,6 @@
-cmake_minimum_required(VERSION 3.16)
+﻿cmake_minimum_required(VERSION 3.16)
 
 set(CMAKE_CXX_STANDARD 23)
-
-include(FetchContent)
-FetchContent_Declare(
-    googletest
-    GIT_REPOSITORY https://github.com/google/googletest.git
-    GIT_TAG release-1.12.1 
-)
-if(WIN32)
-	set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-endif()
-FetchContent_MakeAvailable(googletest)
 
 #message(STATUS "GoogleTest available: ${googletest_POPULATED}")
 #message(STATUS "GoogleTest source dir: ${googletest_SOURCE_DIR}")
@@ -40,7 +29,7 @@ endif()
 project(JSONparser)
 
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
- 
+
 if(BUILD_SHARED_LIBS)
     message(STATUS "${PROJECT_NAME}: Build engine shared library")
     set(BUILD_LIB_FLAG "SHARED")
@@ -53,8 +42,14 @@ file(GLOB_RECURSE MY_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/
 file(GLOB_RECURSE MY_HEADERS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h")
 
 add_executable("${CMAKE_PROJECT_NAME}")
+add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/Test/")
 
 set_property(TARGET "${CMAKE_PROJECT_NAME}" PROPERTY CXX_STANDARD 23)
+
+source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/src" PREFIX "Source Files" FILES ${MY_SOURCES})
+source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/src" PREFIX "Header Files" FILES ${MY_HEADERS})
+
+target_sources("${CMAKE_PROJECT_NAME}" PRIVATE ${MY_SOURCES}  ${MY_HEADERS})
 
 if(PRODUCTION_BUILD)
 	target_compile_definitions("${CMAKE_PROJECT_NAME}" PUBLIC RESOURCES_PATH="./resources/") 
@@ -66,11 +61,6 @@ else()
 	target_compile_definitions("${CMAKE_PROJECT_NAME}" PUBLIC DEVELOPLEMT_BUILD=1) 
 endif()
 
-source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/src" PREFIX "Source Files" FILES ${MY_SOURCES})
-source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/src" PREFIX "Header Files" FILES ${MY_HEADERS})
-
-target_sources("${CMAKE_PROJECT_NAME}" PRIVATE ${MY_SOURCES}  ${MY_HEADERS})
-
 if(MSVC)
 	target_compile_definitions("${CMAKE_PROJECT_NAME}" PUBLIC _CRT_SECURE_NO_WARNINGS)
 	#set_target_properties("${CMAKE_PROJECT_NAME}" PROPERTIES LINK_FLAGS "/SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup") #no console
@@ -81,8 +71,11 @@ if (WIN32)
 endif()
 
 target_include_directories("${CMAKE_PROJECT_NAME}" PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include/")
-target_include_directories("${CMAKE_PROJECT_NAME}" PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/gtest/googletest/include")
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE PROJECT_ROOT="${CMAKE_SOURCE_DIR}")
 
-target_link_libraries("${CMAKE_PROJECT_NAME}" PUBLIC GTest::gtest_main)
+set_target_properties(gmock			 PROPERTIES FOLDER "CMakePredefinedTargets")
+set_target_properties(gmock_main	 PROPERTIES FOLDER "CMakePredefinedTargets")
+set_target_properties(gtest			 PROPERTIES FOLDER "CMakePredefinedTargets")
+set_target_properties(gtest_main	 PROPERTIES FOLDER "CMakePredefinedTargets")
+set_target_properties(JSONParser_lib PROPERTIES FOLDER "CMakePredefinedTargets")

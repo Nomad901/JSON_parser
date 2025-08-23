@@ -10,7 +10,23 @@
 #include <variant>
 #include <optional>
 
-#include "JSON/json.hpp"
+#if __has_include("JSON/json.hpp")
+	#define USE_JSON_LIBRARY 1
+#elif __has_include(<json.hpp>)
+	#define USE_JSON_LIBRARY 2
+#elif __has_include("json.hpp")
+	#define USE_JSON_LIBRARY 3
+#else
+	#error "NO JSON LIBRARY FOUND! MAYBE THE PROBLEM IS IN CMAKELISTS"
+#endif
+
+#if USE_JSON_LIBRARY == 1
+	#include "JSON/json.hpp"
+#elif USE_JSON_LIBRARY == 2
+	#include <json.hpp>
+#elif USE_JSON_LIBRARY == 3
+	#include "json.hpp"
+#endif 
 
 namespace tng
 {
@@ -385,9 +401,9 @@ namespace tng
 		// main point - these functions parse the text;
 		// ------------------------------------------------
 		void parseString();
-		void parseNumber();
+		void parseNumber(char pChar);
 		void parseKeyword(std::string_view pWordExpected);
-		char parseEscapeSequence();
+		char parseEscapeSequence(char pChar);
 		// ------------------------------------------------
 		
 		//
@@ -417,6 +433,12 @@ namespace tng
 		// after each number a space;
 		//
 		void analizerSpaces();
+
+		//
+		// sets quotes around a string;
+		// was made in order to evade changing the whole logic of the lexer;
+		//
+		void setQuotes(std::string& pString);
 
 		//
 		// just a simplified log-function;
@@ -531,8 +553,8 @@ namespace tng
 
 	private:
 		JSONObject mJSONObject;
-		std::string mResourcePath{ RESOURCES_PATH };
-		std::filesystem::path mPath{ RESOURCES_PATH };
+		std::string mResourcePath{};
+		std::filesystem::path mPath{ std::filesystem::current_path() };
 		nlohmann::json mData{ nlohmann::json::object() };
 	};
 

@@ -4,7 +4,6 @@
 
 int main(int argc, char* argv[])
 {
-
 	//std::string tmpMessage = "{\"Number\": [231,32.13,32,4e23-1]}";
 	//tng::JSONLexer lexer; 
 	//try
