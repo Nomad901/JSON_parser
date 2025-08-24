@@ -116,6 +116,10 @@ namespace tng
 		return mValue.index() == std::underlying_type_t<typeVariant>(typeVariant::VECTOR);
 	}
 
+	//
+	// JSONObject implementation
+	//
+
 	tng::JSONObject::JSONObject(const std::string& pKey, const JSONValue& pValue)
 	{
 		mKeyValueStrg.emplace(pKey, pValue);
@@ -197,6 +201,100 @@ namespace tng
 		}
 	}
 
+	std::string JSONObject::createStrFromTokens(tng::JSONLexer pTokens)
+	{
+		bool isKey = false;
+
+		std::string finalString = pTokens.currentToken().mDefinition + '\n';
+		std::string tmpKey, tmpValue; 
+
+		uint32_t counterBraces = 1;
+
+		tng::JSONObject tmpObject;
+
+		for (size_t i = 0; i < pTokens.getNumberTokens(); ++i)
+		{
+			if (pTokens.currentToken().mTokenType == tng::JSONLexer::TokenType::COLON)
+			{
+				tmpKey = pTokens.previousToken().mDefinition;
+				tmpKey += pTokens.nextToken().mDefinition;
+				if (pTokens.nextToken().mDefinition == " ")
+					tmpKey += pTokens.currentToken().mDefinition;
+			}
+
+			switch (pTokens.nextToken().mTokenType)
+			{
+			case tng::JSONLexer::TokenType::LBRACE:
+				tmpValue = "\n{";
+				for (size_t i = 0; i < counterBraces; ++i)
+				{
+					tmpValue.insert(tmpValue.begin(), '\t');
+				}
+				finalString += tmpValue;
+				counterBraces++;
+				break;
+			case tng::JSONLexer::TokenType::RBRACE:
+				tmpValue = "\n{";
+				for (size_t i = 0; i < counterBraces; ++i)
+				{
+					tmpValue.insert(tmpValue.begin(), '\t');
+				}
+				finalString += tmpValue;
+				counterBraces--;
+				break;
+			case tng::JSONLexer::TokenType::LBRACKET:
+				tmpValue.push_back('[');
+				break;
+			case tng::JSONLexer::TokenType::RBRACKET:
+				tmpValue.push_back(']');
+				break;
+			case tng::JSONLexer::TokenType::COMMA:
+				if (tmpValue.contains("["))
+					tmpValue.push_back(',');
+				else
+					tmpValue += ",\n";
+				break;
+			case tng::JSONLexer::TokenType::COLON:
+				tmpValue.push_back(':');
+				break;
+			case tng::JSONLexer::TokenType::STRING:
+				tmpValue += pTokens.currentToken().mDefinition;
+				break;
+			case tng::JSONLexer::TokenType::NUMBER:
+				tmpValue += pTokens.currentToken().mDefinition;
+				break;
+			case tng::JSONLexer::TokenType::KEYWORD:
+				tmpValue += pTokens.currentToken().mDefinition;
+				break;
+			case tng::JSONLexer::TokenType::ESCAPESEQ:
+				tmpValue += pTokens.currentToken().mDefinition;
+				break;
+			case tng::JSONLexer::TokenType::MINUS:
+				tmpValue.push_back('-');
+				break;
+			case tng::JSONLexer::TokenType::PLUS:
+				tmpValue.push_back('+');
+				break;
+			case tng::JSONLexer::TokenType::SPACE:
+				tmpValue.push_back(' ');
+				break;
+			case tng::JSONLexer::TokenType::UNICODE:
+				tmpValue += pTokens.currentToken().mDefinition;
+				break;
+			default:
+				throw JSONException("The type of this token doesnt exist!");
+			}
+			if (*(tmpValue.end() - 1) == '\n')
+			{
+				if (tmpValue.contains('[') && tmpValue.contains(']'))
+				{
+
+				}
+				tmpValue.clear();
+			}
+		}
+	}
+
 	const tng::JSONValue& tng::JSONObject::getValue(std::string_view pKey) noexcept
 	{
 		if (!mKeyValueStrg.contains(std::string(pKey)))
@@ -260,6 +358,58 @@ namespace tng
 
 		}
 	}
+
+	void JSONObject::helperEscapeSeq(std::string& pString, uint32_t pQuantityBraces)
+	{
+		for (size_t i = 0; i < pString.size(); ++i)
+		{
+			if (pString[i] == '\n')
+			{
+				i++;
+				for (uint32_t j = 0; j < pQuantityBraces; ++j)
+				{
+					pString.insert(pString.begin() + i, '\t');
+					i++;
+				}
+			}
+		}
+	}
+
+	void JSONObject::addArray(std::string_view pArray, tng::JSONObject& pObject)
+	{
+		if(*pArray.begin() == '[')
+			std::string(pArray).erase(std::string(pArray).begin());
+		if(*(pArray.end() - 1) == ']')
+			std::string(pArray).erase(std::string(pArray).end());
+		if (std::isalpha(*pArray.begin()))
+		{
+			std::vector<std::string> realArray;
+			realArray.reserve(pArray.size());
+			uint32_t helperNumber = 0;
+			for (size_t i = 0; i < pArray.size(); ++i)
+			{
+				if (pArray[i] == ',')
+				{
+					realArray.push_back(std::string(pArray).substr(helperNumber, i - 1));
+					helperNumber = i + 1;
+				}
+			}
+			
+		}
+		else
+		{
+			addNumber(pArray, pObject);
+		}
+	}
+
+	void JSONObject::addNumber(std::string_view pNumbers, tng::JSONObject& pObject)
+	{
+
+	}
+
+	//
+	// JSONParser class implementation
+	//
 
 	/*nlohmann::json tng::JSONParser::parseToJSON_object(const std::filesystem::path& pPath, bool pDeletePreviousFile)
 	{
@@ -327,6 +477,25 @@ namespace tng
 	{
 	}*/
 
+	nlohmann::json JSONParser::parseToJSON(std::string_view pText)
+	{
+		std::vector<tng::JSONLexer::Token> storageTokens = mLexer.tokenize(pText);
+		
+	}
+
+	bool JSONParser::validate(std::string_view pText)
+	{
+		try 
+		{
+			mLexer.tokenize(pText);
+			return true;
+		}
+		catch (const JSONException& exc)
+		{
+			return false;
+		}
+	}
+
 	void JSONParser::managePath(const std::filesystem::path& pPath)
 	{
 		if (!std::filesystem::exists(pPath))
@@ -392,9 +561,12 @@ namespace tng
 			pFstream.close();
 	}
 
+
 	//
-	// JSONLexer
+	// JSONLexer class implementation
 	//
+
+
 	JSONLexer::JSONLexer()
 	{
 		mTokens.reserve(100);
