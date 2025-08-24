@@ -298,6 +298,8 @@ namespace tng
 
 		//
 		// has some important checks on valid text and scans the text;
+		// P.S. in order to pass an unicode symbol, please, set double slashes, like that:
+		// //u05D2 instead of /u05D2
 		//
 		std::vector<Token>& tokenize(std::string_view pText);
 
@@ -434,13 +436,20 @@ namespace tng
 		// the lexer cant read another next symbol. this function just appends
 		// after each number a space;
 		//
-		void analizerSpaces();
+		void analyzerSpaces();
 
 		//
 		// sets quotes around a string;
 		// was made in order to evade changing the whole logic of the lexer;
 		//
 		void setQuotes(std::string& pString);
+
+		//
+		// analyzes if the input string has 2 or more braces at the end;
+		// if it has - appends one more, respect to the implementation of the lexer;
+		// if it doesnt have - does nothing;
+		//
+		void analyzerBraces();
 
 		//
 		// just a simplified log-function;
