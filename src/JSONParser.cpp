@@ -408,11 +408,15 @@ namespace tng
 
 	std::vector<JSONLexer::Token>& JSONLexer::tokenize(std::string_view pText)
 	{
+		mTokens.clear();
+		mCurrentPosInput = 0;
+		mCurrentToken = 0;
 		if ((!pText.empty() && pText.size() >= 2) &&
 			(*pText.begin() == '{' && *(pText.end() - 1) == '}'))
 		{
 			mInput = pText;
-			analizerSpaces();
+			analyzerBraces();
+			analyzerSpaces();
 			setQuotes(mInput);
 			while (!isAtEnd())
 			{
@@ -536,29 +540,43 @@ namespace tng
 		case tng::JSONLexer::TokenType::SPACE:
 			return "SPACE";
 			break;
+		case tng::JSONLexer::TokenType::UNICODE:
+			return "UNICODE";
+			break;
 		default:
 			throw JSONException("The type of this token doesnt exist!");
 		}
 	}
 
-	void JSONLexer::analizerSpaces()
+	void JSONLexer::analyzerSpaces()
 	{
-		size_t sizeInput = mInput.size();
-		for (size_t i = 0; i < sizeInput; ++i)
+		for (size_t i = 0; i < mInput.size(); ++i)
 		{
-			if (std::isdigit(mInput[i]) && 
-			   !std::isdigit(mInput[i+1]) && 
-					   mInput[i+1] != '.' &&
-					   mInput[i+1] != '\0'&&
-				       mInput[i+1] != '}' &&
-					   mInput[i+1] != 'e' &&
-				       mInput[i+1] != '-' &&
-					   mInput[i + 1] != '+')
+			if (mInput[i] == '\\' &&
+				mInput[i + 1] == 'u')
+			{
+				i += 5;
+				continue;
+			}
+			if (std::isdigit(mInput[i])     &&
+			   !std::isdigit(mInput[i + 1]) &&
+				mInput[i + 1] != '.'		&&
+				mInput[i + 1] != '\0'		&&
+				mInput[i + 1] != '}'		&&
+				mInput[i + 1] != 'e'		&&
+				mInput[i + 1] != '-'		&&
+				mInput[i + 1] != '+')
 			{
 				mInput.insert(i+1, " ");
-				sizeInput++;
+				i++;
 			}
 		}
+	}
+
+	void JSONLexer::analyzerBraces()
+	{
+		if (mInput[mInput.size() - 1] == '}' && mInput[mInput.size() - 2] == '}')
+			mInput.push_back('}');
 	}
 
 	void JSONLexer::error(std::string_view pMessage)
@@ -623,6 +641,7 @@ namespace tng
 		case '9': parseNumber(c); break;
 		case '-': parseNumber(c); break;
 		case '+': parseNumber(c); break;
+		case '.': parseNumber(c); break;
 		case '"': parseString(); break;
 		case 't':
 			if(mInput[mCurrentPosInput] == 'r')
@@ -639,6 +658,18 @@ namespace tng
 		case ' ': addToken(TokenType::SPACE, " "); break;
 		case '\n': parseEscapeSequence(c); break;
 		case '\t': parseEscapeSequence(c); break;
+		case '\f': parseEscapeSequence(c); break;
+		case '\\':
+			if (advance() == 'u')
+				parseUnicode();
+			else
+			{
+				inverseAdvance();
+				parseEscapeSequence(c);
+			}
+			break;
+		case '\b': parseEscapeSequence(c); break;
+		case '\r': parseEscapeSequence(c); break;
 		case '\0': addToken(TokenType::RBRACE, "}"); break;
 		default:
 			inverseAdvance();
@@ -648,11 +679,9 @@ namespace tng
 
 	bool JSONLexer::isAtEnd() const noexcept
 	{
-		if (!mTokens.empty() && mCurrentPosInput < mInput.size())
-		{
-			return mInput[mCurrentPosInput] == '\0' ||
-				  (mTokens.end() - 1)->mTokenType == TokenType::RBRACE;
-		}
+		if (!mTokens.empty())
+			return (mTokens.end() - 1)->mTokenType == TokenType::RBRACE &&
+					mCurrentPosInput == mInput.size() - 1;
 		return false;
 	}
 
@@ -714,8 +743,16 @@ namespace tng
 	void JSONLexer::parseString()
 	{
 		std::string tmpString;
+		if (inverseAdvance() == '\"' && peek() == '\"')
+		{
+			addToken(TokenType::STRING, "\"\"");
+			advance();
+			advance();
+			return;
+		}
+		advance();
 		while (peek() != '\"' &&
-			   peek() != '}' &&
+			   peek() != '}'  &&
 			  !isAtEnd())
 		{
 			if (isEscapeChar(peek()))
@@ -732,11 +769,9 @@ namespace tng
 		if (peek() == '\"')
 			advance();
 		addToken(TokenType::STRING, tmpString);
-		mTokens[mTokens.size() - 1].mDefinition = tmpString;
 	}
 	void JSONLexer::parseNumber(char pChar)
 	{
-		static bool firstTime = true;
 		char c = pChar;
 		std::string finalNumber;
 		auto symbolChecker = [&](char& c)
@@ -744,10 +779,12 @@ namespace tng
 				if (c == '-' || c == '+' || c == 'e')
 				{
 					finalNumber.push_back(c);
-					if(firstTime)
-						c = advance();
 					c = advance();
-					firstTime = false;
+					if (c == '-' || c == '+' || c == 'e')
+					{
+						finalNumber.push_back(c);
+						c = advance();
+					}
 				}
 			};
 		symbolChecker(c);
@@ -755,21 +792,32 @@ namespace tng
 		{
 			finalNumber.push_back(c);
 			c = advance();
-			if (firstTime)
-			{
-				c = advance();
-				firstTime = false;
-			}
 			if (c == '\0' || c == '}')
 				break;
 			symbolChecker(c);
 		}
-		firstTime = true;
 		addToken(TokenType::NUMBER, finalNumber);
 		if (c == '}')
 			addToken(TokenType::RBRACE, "}");
 	}
 
+	void JSONLexer::parseUnicode()
+	{
+		inverseAdvance();
+		inverseAdvance();
+		char c = peek();
+		std::string unicodeStr;
+		if (c == '\\')
+		{
+			for (uint16_t i = 0; i <= 5; ++i)
+			{
+				c = advance();
+				unicodeStr.push_back(c);
+			}
+		}
+		addToken(TokenType::UNICODE, unicodeStr);
+	}
+	
 	void JSONLexer::parseKeyword(std::string_view pWordExpected)
 	{
 		mCurrentPosInput += pWordExpected.size() - 1;
@@ -780,8 +828,14 @@ namespace tng
 	void JSONLexer::setQuotes(std::string& pString)
 	{
 		std::string partText;
-		for (size_t i = 0; i < pString.size() - 1; ++i)
+		for (size_t i = 0; i < pString.size(); ++i)
 		{
+			if (pString[i] == '\\' &&
+				pString[i + 1] == 'u')
+			{
+				i += 5;
+				continue;
+			}
 			if (std::isalpha(pString[i]))
 				partText += pString[i];
 			else
@@ -789,12 +843,16 @@ namespace tng
 				if (!partText.empty())
 				{
 					std::transform(partText.begin(), partText.end(), partText.begin(), ::tolower);
-					if (partText != "null" ||
-						partText != "true" ||
-						partText != "false")
+					if (partText != "null" &&
+						partText != "true" &&
+						partText != "false"&&
+						partText != "e"	   &&
+						pString[i - partText.size() - 1] != '\"' &&
+						pString[i] != '\"')
 					{
 						pString.insert(i - partText.size(), "\"");
-						pString.insert(i, "\"");
+						pString.insert(i + 1, "\"");
+						i += 2;
 					}
 					partText.clear();
 				}
@@ -802,13 +860,3 @@ namespace tng
 		}
 	}
 }
-			/*if (std::isalpha(pString[i + 1]) && !std::isalpha(pString[i]))
-			{
-				pString.insert(i + 1, "\"");
-				i++;
-			}
-			else if (std::isalpha(pString[i]) && !std::isalpha(pString[i + 1]))
-			{
-				pString.insert(i+1, "\"");
-				i++;
-			}*/
