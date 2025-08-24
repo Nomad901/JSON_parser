@@ -195,7 +195,7 @@ namespace tng
 		void changeValue(std::string_view pKey, const JSONValue& pNewValue);
 
 		//
-		// adds a key and value
+		// adds key and value
 		//
 		void addObject(std::string_view pKey, const JSONValue& pValue);
 
@@ -216,6 +216,11 @@ namespace tng
 		//
 		void toObjectFormat(const nlohmann::json& pJsonData);
 			
+		//
+		// creates std::string from tokens, which we created in the parser class;
+		//
+		std::string createStrFromTokens(tng::JSONLexer pTokens);
+
 		//
 		// getter for value;
 		// 
@@ -249,6 +254,20 @@ namespace tng
 
 	private:
 		void toJsonFormatHelper(nlohmann::json& pData, const JSONValue& pValue);
+
+		//
+		// sets \t according to quantity of braces in the string;
+		//
+		void helperEscapeSeq(std::string& pString, uint32_t pQuantityBraces);
+
+		//
+		// Helper-functions which can help to append some strings a much more properly 
+		// from point of view JSONValue;
+		// 
+		// ------------------------------
+		void addArray(std::string_view pKey, std::string_view pArray, tng::JSONObject& pObject);
+		void addNumber(std::string_view pKey, std::string_view pNumbers, tng::JSONObject& pObject);
+		// ------------------------------
 
 	private:
 		std::unordered_map<std::string, JSONValue> mKeyValueStrg;
@@ -489,11 +508,11 @@ namespace tng
 		nlohmann::json parseToJSON(std::string_view pText);
 
 		//
-		// validates data and that everything is alright, according to JSON rules;
-		// throws, if something is wrong
+		// validating a string without parsing; 
+		// if you dont want to parse a string, just would like to check
+		// if the string is accessible;
 		//
-		void validateData(const std::filesystem::path& pPath);
-		void validateData(std::string_view pText);
+		bool validate(std::string_view pText);
 
 		//
 		// reads data from the file (which we converted) in string;
@@ -564,6 +583,7 @@ namespace tng
 
 	private:
 		JSONObject mJSONObject;
+		JSONLexer mLexer;
 		std::string mResourcePath{};
 		std::filesystem::path mPath{ std::filesystem::current_path() };
 		nlohmann::json mData{ nlohmann::json::object() };
