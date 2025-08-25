@@ -91,7 +91,7 @@ namespace tng
 		template<typename T>
 			requires ProperValue<T>
 		JSONValue(T&& pValue);
-		explicit JSONValue(const std::initializer_list<JSONValue>& pArray);
+	    JSONValue(const std::initializer_list<JSONValue>& pArray);
 		~JSONValue() = default;
 		JSONValue(const JSONValue&) = default;
 		JSONValue& operator=(const JSONValue&) = default;
@@ -301,7 +301,7 @@ namespace tng
 	private:
 		char* mMessage{ nullptr };
 	};
-
+	
 	class JSONLexer
 	{
 	private:
@@ -340,6 +340,7 @@ namespace tng
 		// returns next token of storage of tokens;
 		//
 		Token nextToken();
+
 		// -------------------------------
 
 		//
