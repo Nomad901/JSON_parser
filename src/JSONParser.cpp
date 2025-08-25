@@ -375,7 +375,7 @@ namespace tng
 		}
 	}
 
-	void JSONObject::addArray(std::string_view pArray, tng::JSONObject& pObject)
+	void JSONObject::addArray(std::string_view pKey, std::string_view pArray, tng::JSONObject& pObject)
 	{
 		if(*pArray.begin() == '[')
 			std::string(pArray).erase(std::string(pArray).begin());
@@ -394,17 +394,104 @@ namespace tng
 					helperNumber = i + 1;
 				}
 			}
-			
+			for (auto& i : realArray)
+			{
+				pObject.addObject(pKey, std::string(i));
+			}
 		}
 		else
 		{
-			addNumber(pArray, pObject);
+			addNumber(pKey, pArray, pObject);
 		}
 	}
 
-	void JSONObject::addNumber(std::string_view pNumbers, tng::JSONObject& pObject)
+	void JSONObject::addNumber(std::string_view pKey, std::string_view pNumbers, tng::JSONObject& pObject)
 	{
+		if (!std::isdigit(pNumbers[0]) ||
+			!std::isdigit(pNumbers[1]))
+			throw JSONException("Array does not contain any numbers!\n");
+		enum class type
+		{
+			INT = 0,
+			UINT = 1,
+			FLOAT = 2
+		} typeNumbers;
 
+		std::variant<int32_t, uint32_t, float> storageChecker;
+		if (pNumbers.find('.') != std::string::npos)
+		{
+			storageChecker = 1.0f;
+			typeNumbers = type::FLOAT;
+		}
+		else if (pNumbers.find('-') != std::string::npos)
+		{
+			storageChecker = -1;
+			typeNumbers = type::INT;
+		}
+		else
+		{
+			storageChecker = 1;
+			typeNumbers = type::UINT;
+		}
+
+		using underlyingType = std::underlying_type_t<type>;
+		auto& storagedValue  = std::get<underlyingType>(storageChecker);
+		using typeStorage	 = decltype(storagedValue);
+
+		std::vector<typeStorage> storageNumbers;
+		storageNumbers.reserve(50);
+		
+		std::string tmpNumber;
+		for (auto& i : pNumbers)
+		{
+			if (std::isdigit(i))
+				tmpNumber.push_back(i);
+			else
+			{
+				switch (typeNumbers)
+				{
+				case type::INT:
+					int32_t i = std::stoi(tmpNumber);
+					storageNumbers.push_back(i);
+					break;
+				case type::UINT:
+					uint32_t i = std::stoul(tmpNumber);
+					storageNumbers.push_back(i);
+					break;
+				case type::FLOAT:
+					float i = std::stof(tmpNumber);
+					storageNumbers.push_back(i);
+					break;
+				default:
+					throw JSONException("Somehow we found a type which does not exist >:(\n");
+				}
+				tmpNumber.clear();
+			}
+		}
+		if (!storageNumbers.empty())
+		{
+			std::vector<tng::JSONValue> values;
+			for (auto& i : storageNumbers)
+			{
+				tng::JSONValue value;
+				switch (typeNumbers)
+				{
+				case type::INT:
+					value.setValue((int32_t)i);
+					break;
+				case type::UINT:
+					value.setValue((uint32_t)i);
+					break;
+				case type::FLOAT:
+					value.setValue((float)i);
+					break;
+				default:
+					throw JSONException("Somehow we found a type which does not exist >:(\n");
+				}
+				values.push_back(value);
+			}
+			//pObject.addObject(pKey, tng::JSONValue(values));
+		}
 	}
 
 	//
