@@ -31,9 +31,11 @@
 namespace tng
 {
 	template<typename T>
-	concept isString = std::is_same_v<std::string, T> ||
-					   std::is_same_v<const char*, T> ||
-					   std::is_same_v<const char, T>  ||
+	concept isString = std::is_same_v<std::string, T>	   ||
+					   std::is_same_v<std::string_view, T> ||
+ 					   std::is_same_v<const char*, T>	   ||
+					   std::is_same_v<const char, T>	   ||
+					   std::is_same_v<char*, T>			   ||
 					   std::is_same_v<char, T>;
 						
 	template<typename T>
@@ -91,7 +93,8 @@ namespace tng
 		template<typename T>
 			requires ProperValue<T>
 		JSONValue(T&& pValue);
-	    JSONValue(const std::initializer_list<JSONValue>& pArray);
+	    explicit JSONValue(const std::initializer_list<JSONValue>& pArray);
+		explicit JSONValue(const std::vector<JSONValue>& pArrray);
 		~JSONValue() = default;
 		JSONValue(const JSONValue&) = default;
 		JSONValue& operator=(const JSONValue&) = default;
@@ -175,6 +178,8 @@ namespace tng
 
 	class JSONObject
 	{
+	private:
+		class JSONLexer;
 	public:
 		JSONObject() = default;
 		JSONObject(const std::string& pKey, const JSONValue& pValue);
@@ -265,8 +270,10 @@ namespace tng
 		// from point of view JSONValue;
 		// 
 		// ------------------------------
-		void addArray(std::string_view pKey, std::string_view pArray, tng::JSONObject& pObject);
-		void addNumber(std::string_view pKey, std::string_view pNumbers, tng::JSONObject& pObject);
+		void addArray(std::string& pKey, std::string& pArray,
+					  tng::JSONObject& pObject);
+		void addNumber(std::string& pKey, std::string& pNumbers,
+					   tng::JSONObject& pObject);
 		// ------------------------------
 
 	private:
