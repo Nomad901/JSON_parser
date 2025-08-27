@@ -6,6 +6,7 @@
 #include <fstream>
 #include <exception>
 #include <unordered_map>
+#include <unordered_set>
 #include <type_traits>
 #include <variant>
 #include <optional>
@@ -72,8 +73,8 @@ namespace tng
 		enum class typeVariant;
 		struct anyType
 		{
-			template<typename T, typename U = std::enable_if<ProperValue<T>>>
-			operator T()
+			template<typename T>
+			operator T() requires ProperValue<T>
 			{
 				if constexpr (isKeyword<T>)
 					return mJsonValue.getBool();
@@ -92,7 +93,7 @@ namespace tng
 		JSONValue() = default;
 		template<typename T>
 			requires ProperValue<T>
-		JSONValue(T&& pValue);
+		JSONValue(T pValue);
 	    explicit JSONValue(const std::initializer_list<JSONValue>& pArray);
 		explicit JSONValue(const std::vector<JSONValue>& pArrray);
 		~JSONValue() = default;
@@ -127,27 +128,32 @@ namespace tng
 		//
 		// returns contained boolean (if available);
 		//
-		bool getBool() const noexcept;
+		bool getBool() const;
+
+		//
+		// returns an uint value;
+		//
+		uint32_t getUint() const;
 
 		//
 		// return contained int;
 		//
-		int32_t getInt() const noexcept;
+		int32_t getInt() const;
 
 		//
 		// returns contained float;
 		//
-		float getFloat() const noexcept;
+		float getFloat() const;
 
 		//
 		// returns contained string;
 		//
-		const std::string& getString() const noexcept;
+		const std::string& getString() const;
 		
 		//
 		// returns contained array;
 		//
-		const std::vector<JSONValue>& getArray() const noexcept;
+		const std::vector<JSONValue>& getArray() const;
 
 		//
 		// checkers if a value is an exact type;
@@ -155,6 +161,7 @@ namespace tng
 		// ----------------------------------
 		bool valueIsBool() const noexcept;
 		bool valueIsFloat() const noexcept;
+		bool valueIsUint() const noexcept;
 		bool valueIsInt() const noexcept;
 		bool valueIsString() const noexcept;
 		bool valueIsArray() const noexcept;
@@ -164,151 +171,19 @@ namespace tng
 		enum class typeVariant
 		{
 			BOOL = 0,
-			INT = 1,
-			FLOAT = 2,
-			STRING = 3,
-			VECTOR = 4,
-			NULLTYPE = 5
+			UINT = 1,
+			INT = 2,
+			FLOAT = 3,
+			STRING = 4,
+			VECTOR = 5,
+			NULLTYPE = 6
 		};
 	private:
-		std::variant<bool, int32_t, float, std::string,
+		std::variant<bool, uint32_t, int32_t, float, std::string,
 					 std::vector<JSONValue>, std::nullptr_t> mValue{ 0 };
 		typeVariant mTypeVariant{ typeVariant::INT };
 	};
 
-	class JSONObject
-	{
-	private:
-		class JSONLexer;
-	public:
-		JSONObject() = default;
-		JSONObject(const std::string& pKey, const JSONValue& pValue);
-		~JSONObject() = default;
-		JSONObject(const JSONObject&) = default;
-		JSONObject& operator=(const JSONObject&) = default;
-		JSONObject(JSONObject&&) = default;
-		JSONObject& operator=(JSONObject&&) = default;
-
-		//
-		// changes the name of old key on the name of new key;
-		//
-		void changeKey(std::string_view pOldKey, std::string_view pNewKey);
-		
-		//
-		// changes old value on new value;
-		//
-		void changeValue(std::string_view pKey, const JSONValue& pNewValue);
-
-		//
-		// adds key and value
-		//
-		void addObject(std::string_view pKey, const JSONValue& pValue);
-
-		//
-		// moves value to key, and key to value;
-		// if this is success - will return true, otherwise - false;
-		//
-		bool tryMove(std::string_view pKey, const JSONValue& pValue);
-
-		//
-		// converting jsonObject to json-file format;
-		//
-		nlohmann::json toJsonFormat();
-
-		//
-		// reverse operation;
-		// converts json data into jsonObject;
-		//
-		void toObjectFormat(const nlohmann::json& pJsonData);
-			
-		//
-		// creates std::string from tokens, which we created in the parser class;
-		//
-		std::string createStrFromTokens(tng::JSONLexer pTokens);
-
-		//
-		// getter for value;
-		// 
-		const JSONValue& getValue(std::string_view pKey) noexcept;
-
-		//
-		// trying to merge another JSONObject with this one;
-		// returns false - if the operation was not successful; 
-		// returns true  - otherwise;
-		//
-		bool tryMerge(const JSONObject& pJSONObject);
-
-		//
-		// returns size of the storage contained in the class;
-		//
-		size_t getSize() const noexcept;
-
-		//
-		// returns true  - if pKey is contained in the storage;
-		// returns false - if pKey is not contained in the storage;
-		//
-		bool contains(std::string_view pKey) const noexcept;
-
-		//
-		// returns value - if value is definitely contained in the storage;
-		// returns std::nullopt - if values is not contained in the storage;
-		//
-		std::optional<JSONValue> tryGetValue(std::string_view pKey) noexcept;
-		
-		const std::unordered_map<std::string, JSONValue>& getStorage() const noexcept;
-
-	private:
-		void toJsonFormatHelper(nlohmann::json& pData, const JSONValue& pValue);
-
-		//
-		// sets \t according to quantity of braces in the string;
-		//
-		void helperEscapeSeq(std::string& pString, uint32_t pQuantityBraces);
-
-		//
-		// Helper-functions which can help to append some strings a much more properly 
-		// from point of view JSONValue;
-		// 
-		// ------------------------------
-		void addArray(std::string& pKey, std::string& pArray,
-					  tng::JSONObject& pObject);
-		void addNumber(std::string& pKey, std::string& pNumbers,
-					   tng::JSONObject& pObject);
-		// ------------------------------
-
-	private:
-		std::unordered_map<std::string, JSONValue> mKeyValueStrg;
-	};
-
-	class JSONException : public std::exception
-	{
-	public:
-		JSONException(const char* pMessage);
-		JSONException(const std::exception& pException);
-		~JSONException();
-		JSONException(const JSONException&) = default;
-		JSONException& operator=(const JSONException&) = default;
-		JSONException(JSONException&&) = default;
-		JSONException& operator=(JSONException&&) = default;
-
-		//
-		// returns the reason of exception in text;
-		//
-		const char* what() const noexcept;
-
-	private:
-		//
-		// erasing the last message of the exception;
-		//
-		void eraseMessage();
-		//
-		// assigns the message, which we've passed, to our exception's message;
-		//
-		void assignMessage(const char* pMessage);
-	private:
-		char* mMessage{ nullptr };
-	};
-	
 	class JSONLexer
 	{
 	private:
@@ -332,7 +207,6 @@ namespace tng
 		//
 		// iterators for storage of tokens
 		// -------------------------------
-
 		//
 		// returns previous token of storage of tokensv
 		//
@@ -347,7 +221,6 @@ namespace tng
 		// returns next token of storage of tokens;
 		//
 		Token nextToken();
-
 		// -------------------------------
 
 		//
@@ -362,7 +235,13 @@ namespace tng
 		//
 		// returns size of storage of tokens(or just number of tokens in general);
 		//
-		size_t getNumberTokens() const noexcept; 
+		size_t getNumberTokens() const noexcept;
+
+		//
+		// returns an iterator (to be more precise just an index) of the current token 
+		// from the storage;
+		//
+		uint32_t getIndexOfCurrentToken() const noexcept;
 
 		//
 		// types of tokens;
@@ -384,7 +263,7 @@ namespace tng
 			ESCAPESEQ = 12,
 			UNICODE = 13
 		};
-		
+
 		//
 		// token structure which contains type and definition(string) of tokens;
 		//
@@ -436,7 +315,7 @@ namespace tng
 		void parseUnicode();
 		char parseEscapeSequence(char pChar);
 		// ------------------------------------------------
-		
+
 		//
 		// checks if a char - is an escape symbol, like "\n","\t" and so on;
 		//
@@ -485,21 +364,147 @@ namespace tng
 
 	private:
 		int32_t mCurrentPosInput{};
-		int32_t mCurrentToken{};
+		uint32_t mCurrentToken{};
 		std::string mInput{};
 		std::vector<Token> mTokens;
 	};
 
-	//class JSONLexerTest : public ::testing::Test
-	//{
-	//public:
+	class JSONObject
+	{
+	public:
+		JSONObject() = default;
+		JSONObject(const std::string& pKey, const JSONValue& pValue);
+		~JSONObject() = default;
+		JSONObject(const JSONObject&) = default;
+		JSONObject& operator=(const JSONObject&) = default;
+		JSONObject(JSONObject&&) = default;
+		JSONObject& operator=(JSONObject&&) = default;
 
-	//	void SetUp() override;
-	//	void TearDown() override;
+		//
+		// changes the name of old key on the name of new key;
+		//
+		void changeKey(std::string_view pOldKey, std::string_view pNewKey);
+		
+		//
+		// changes old value on new value;
+		//
+		void changeValue(std::string_view pKey, const JSONValue& pNewValue);
 
-	//private:
-	//	tng::JSONLexer mLexer;
-	//};
+		//
+		// adds key and value
+		//
+		void addObject(std::string_view pKey, const JSONValue& pValue);
+
+		//
+		// moves value to key, and key to value;
+		// if this is success - will return true, otherwise - false;
+		//
+		bool tryMove(std::string_view pKey, const JSONValue& pValue);
+
+		//
+		// converting jsonObject to json-file format;
+		//
+		nlohmann::json toJsonFormat();
+
+		//
+		// reverse operation;
+		// converts json data into jsonObject;
+		//
+		void toObjectFormat(const nlohmann::json& pJsonData);
+			
+		//
+		// creates std::string from tokens, which we created in the parser class;
+		//
+		tng::JSONObject createObjFromTokens(tng::JSONLexer pTokens);
+
+		//
+		// getter for value;
+		// 
+		const JSONValue& getValue(std::string_view pKey) noexcept;
+
+		//
+		// trying to merge another JSONObject with this one;
+		// returns false - if the operation was not successful; 
+		// returns true  - otherwise;
+		//
+		bool tryMerge(const JSONObject& pJSONObject);
+
+		//
+		// returns size of the storage contained in the class;
+		//
+		size_t getSize() const noexcept;
+
+		//
+		// returns true  - if pKey is contained in the storage;
+		// returns false - if pKey is not contained in the storage;
+		//
+		bool contains(std::string_view pKey) const noexcept;
+
+		//
+		// checks if the character is '!', '?' and so on;
+		//
+		bool isSpecialChar(char pChar) const noexcept;
+
+		//
+		// returns value - if value is definitely contained in the storage;
+		// returns std::nullopt - if values is not contained in the storage;
+		//
+		std::optional<JSONValue> tryGetValue(std::string_view pKey) noexcept;
+		
+		const std::unordered_map<std::string, JSONValue>& getStorage() const noexcept;
+
+	private:
+		void toJsonFormatHelper(nlohmann::json& pData, const JSONValue& pValue);
+
+		//
+		// sets \t according to quantity of braces in the string;
+		//
+		void helperEscapeSeq(std::string& pString, uint32_t pQuantityBraces);
+
+		//
+		// Helper-functions which can help to append some strings a much more properly 
+		// from point of view JSONValue;
+		// 
+		// ------------------------------
+		void addArray(std::string& pKey, std::string& pArray,
+					  tng::JSONObject& pObject);
+		void addNumber(std::string_view pNumber,
+					   std::vector<tng::JSONValue>& pStorage);
+		// ------------------------------
+
+	private:
+		std::unordered_map<std::string, JSONValue> mKeyValueStrg;
+	};
+
+	class JSONException : public std::exception
+	{
+	public:
+		JSONException(const char* pMessage);
+		JSONException(const std::exception& pException);
+		~JSONException();
+		JSONException(const JSONException&) = default;
+		JSONException& operator=(const JSONException&) = default;
+		JSONException(JSONException&&) = default;
+		JSONException& operator=(JSONException&&) = default;
+
+		//
+		// returns the reason of exception in text;
+		//
+		const char* what() const noexcept;
+
+	private:
+		//
+		// erasing the last message of the exception;
+		//
+		void eraseMessage();
+		//
+		// assigns the message, which we've passed, to our exception's message;
+		//
+		void assignMessage(const char* pMessage);
+	private:
+		char* mMessage{ nullptr };
+	};
+	
 
 	class JSONParser
 	{
@@ -589,6 +594,22 @@ namespace tng
 		//
 		void manageData(const std::filesystem::path& pPath, nlohmann::json& pData);
 
+		//
+		// makes the passed String (which was created for JSON) properly constructed; 
+		//
+		nlohmann::json repairJSONString(const std::string& pJSONString);
+
+		//
+		// repairs an object in appropiate way for JSON;
+		//
+		void repairObject(tng::JSONObject& pObject);
+
+		//
+		// manages array properly. arrays are made with recursion for convenience;
+		//
+		void manageArray(std::string_view pKey, nlohmann::json& pData, 
+						 const std::vector<tng::JSONValue>& pValues);
+
 	private:
 		JSONObject mJSONObject;
 		JSONLexer mLexer;
@@ -599,15 +620,17 @@ namespace tng
 
 	template<typename T>
 	requires ProperValue<T>
-	inline JSONValue::JSONValue(T&& pValue)
+	inline JSONValue::JSONValue(T pValue)
 	{
-		if (isIntNumber<T>)
+		if constexpr (std::is_unsigned_v<T>) 
+			mTypeVariant = typeVariant::UINT;
+		else if constexpr(isIntNumber<T>)
 			mTypeVariant = typeVariant::INT;
-		else if (isKeyword<T>)
+		else if constexpr (isKeyword<T>)
 			mTypeVariant = typeVariant::BOOL;
-		else if (isFloatNumber<T>)
+		else if constexpr (isFloatNumber<T>)
 			mTypeVariant = typeVariant::FLOAT;
-		else if (isString<T>)
+		else if constexpr (isString<T>)
 			mTypeVariant = typeVariant::STRING;
 		else
 			throw JSONException("This is not a value!\n");
