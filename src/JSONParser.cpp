@@ -56,6 +56,12 @@ namespace tng
 		mTypeVariant = typeVariant::VECTOR;
 	}
 
+	JSONValue::JSONValue(const std::vector<std::vector<JSONValue>>& pArrray)
+	{
+		mValue = pArrray;
+		mTypeVariant = typeVariant::NESTED_ARRAY;
+	}
+
 	void tng::JSONValue::setArray(const std::initializer_list<JSONValue>& pArray)
 	{
 		mValue = pArray;
@@ -109,6 +115,13 @@ namespace tng
 		return std::get<std::vector<JSONValue>>(mValue);
 	}
 
+	const std::vector<std::vector<JSONValue>>& JSONValue::getNestedArray() const
+	{
+		if(mTypeVariant != typeVariant::NESTED_ARRAY)
+			throw JSONException("Variant doesnt hold vector!\n");
+		return std::get<std::vector<std::vector<JSONValue>>>(mValue);
+	}
+
 	bool tng::JSONValue::valueIsString() const noexcept
 	{
 		return mValue.index() == std::underlying_type_t<typeVariant>(typeVariant::STRING);
@@ -137,6 +150,11 @@ namespace tng
 	bool tng::JSONValue::valueIsArray() const noexcept
 	{
 		return mValue.index() == std::underlying_type_t<typeVariant>(typeVariant::VECTOR);
+	}
+
+	bool JSONValue::valueIsNestedArray() const noexcept
+	{
+		return mValue.index() == std::underlying_type_t<typeVariant>(typeVariant::NESTED_ARRAY);
 	}
 
 	//
@@ -407,18 +425,21 @@ namespace tng
 	void JSONObject::addArray(std::string& pKey, std::string& pArray,
 							  tng::JSONObject& pObject)
 	{
+		static uint32_t counterBraces = std::count(pArray.begin(), pArray.end(), '[');
+		static uint32_t currentCounterBraces = 0; 
 		if (pArray.find(']') != std::string::npos &&
 			pArray.find('[') != std::string::npos)
 		{
+			currentCounterBraces++;
 			pArray.erase(pArray.size() - 2, 1);
 			pArray.erase(0, 1);
 		}
 		else
 			throw JSONException("The passed string is not an array in function addArray()!\n");
-		
-		std::vector<tng::JSONValue> realStorage;
 
-		uint32_t start{}, end{};
+		std::vector<JSONValue> mHelperStorage;
+
+		size_t start{}, end{};
 		while ((end = pArray.find(',', start)) != std::string::npos)
 		{
 			std::string element = pArray.substr(start, end - start);
@@ -429,15 +450,19 @@ namespace tng
 					uint32_t startSubArray{}, endSubArray{};
 					startSubArray = pArray.find('[');
 					endSubArray = pArray.find(']');
-					std::string subArray = pArray.substr(startSubArray, endSubArray - startSubArray);
-					pArray.erase(startSubArray, 1);
-					pArray.erase(endSubArray, 1);
+					std::string subArray = pArray.substr(startSubArray, endSubArray);
+					if (subArray.find_last_of('\n') != std::string::npos)
+						subArray.erase(subArray.size() - 1, 1);
+					currentCounterBraces--;
 					addArray(pKey, subArray, pObject);
+					currentCounterBraces++;
+					start = endSubArray + 1;
+					continue;
 				}
 				if (std::any_of(element.begin(), element.end(), [](char pChar) { return std::isdigit(pChar); }))
-					addNumber(element, realStorage);
+					addNumber(element, mHelperStorage);
 				else
-					realStorage.emplace_back(tng::JSONValue(std::string(element)));
+					mHelperStorage.emplace_back(tng::JSONValue(std::string(element)));
 			}	
 			start = end + 1;
 		}
@@ -445,10 +470,20 @@ namespace tng
 		if (start < pArray.size())
 		{
 			std::string element = pArray.substr(start);
+			if (element.find_last_of('\n') != std::string::npos)
+				element.erase(element.size() - 1, 1);
 			if (!element.empty())
-				realStorage.emplace_back(tng::JSONValue(std::string(element)));
+				mHelperStorage.emplace_back(tng::JSONValue(std::string(element)));
 		}
-		pObject.addObject(pKey, tng::JSONValue(realStorage));
+
+		if (currentCounterBraces == counterBraces)
+		{
+			mNestedArrays.push_back(mHelperStorage);
+			pObject.addObject(pKey, tng::JSONValue(mNestedArrays));
+		}
+		else
+			mNestedArrays.push_back(mHelperStorage);
+		
 	}
 
 	void JSONObject::addNumber(std::string_view pNumber, std::vector<tng::JSONValue>& pStorage)
@@ -504,6 +539,8 @@ namespace tng
 			{
 				if (value.valueIsArray())
 					manageArray(key, jsonData, value.getArray());
+				else if (value.valueIsNestedArray())
+					manageNestedArrays(key, jsonData, value.getNestedArray());
 				else if (value.valueIsBool())
 					jsonData[key] = value.getBool();
 				else if (value.valueIsFloat())
@@ -629,17 +666,31 @@ namespace tng
 		for (auto& value : pValues)
 		{
 			if (value.valueIsArray())
-				manageArray(pKey, pData, value.getArray());
+			{
+				std::initializer_list<JSONValue> values;
+				/*for (auto& i : value.getArray())
+				{
+					pData[pKey].push_back(value.getArray());
+				}*/
+			}
 			else if (value.valueIsBool())
-				pData[pKey] = value.getBool();
+				pData[pKey] += value.getBool();
 			else if (value.valueIsFloat())
-				pData[pKey] = value.getFloat();
+				pData[pKey] += value.getFloat();
 			else if (value.valueIsUint())
-				pData[pKey] = value.getUint();
+				pData[pKey] += value.getUint();
 			else if (value.valueIsInt())
-				pData[pKey] = value.getInt();
+				pData[pKey] += value.getInt();
 			else if (value.valueIsString())
-				pData[pKey] = value.getString();
+				pData[pKey] += value.getString();
+		}
+	}
+
+	void JSONParser::manageNestedArrays(std::string_view pKey, nlohmann::json& pData, const std::vector<std::vector<JSONValue>>& pValue)
+	{	
+		for (auto& i : pValue)
+		{
+			manageArray(pKey, pData, i);
 		}
 	}
 
