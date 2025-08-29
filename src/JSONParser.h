@@ -96,6 +96,7 @@ namespace tng
 		JSONValue(T pValue);
 	    explicit JSONValue(const std::initializer_list<JSONValue>& pArray);
 		explicit JSONValue(const std::vector<JSONValue>& pArrray);
+		explicit JSONValue(const std::vector<std::vector<JSONValue>>& pNestedArrays);
 		~JSONValue() = default;
 		JSONValue(const JSONValue&) = default;
 		JSONValue& operator=(const JSONValue&) = default;
@@ -156,6 +157,11 @@ namespace tng
 		const std::vector<JSONValue>& getArray() const;
 
 		//
+		// returns contained nested array;
+		//
+		const std::vector<std::vector<JSONValue>>& getNestedArray() const;
+
+		//
 		// checkers if a value is an exact type;
 		// 
 		// ----------------------------------
@@ -165,6 +171,7 @@ namespace tng
 		bool valueIsInt() const noexcept;
 		bool valueIsString() const noexcept;
 		bool valueIsArray() const noexcept;
+		bool valueIsNestedArray() const noexcept;
 		// ----------------------------------		
 
 	private:
@@ -176,11 +183,12 @@ namespace tng
 			FLOAT = 3,
 			STRING = 4,
 			VECTOR = 5,
-			NULLTYPE = 6
+			NULLTYPE = 6,
+			NESTED_ARRAY = 7
 		};
 	private:
 		std::variant<bool, uint32_t, int32_t, float, std::string,
-					 std::vector<JSONValue>, std::nullptr_t> mValue{ 0 };
+					 std::vector<JSONValue>, std::nullptr_t, std::vector<std::vector<JSONValue>>> mValue{ 0 };
 		typeVariant mTypeVariant{ typeVariant::INT };
 	};
 
@@ -474,6 +482,7 @@ namespace tng
 
 	private:
 		std::unordered_map<std::string, JSONValue> mKeyValueStrg;
+		std::vector<std::vector<JSONValue>> mNestedArrays;
 	};
 
 	class JSONException : public std::exception
@@ -609,6 +618,12 @@ namespace tng
 		//
 		void manageArray(std::string_view pKey, nlohmann::json& pData, 
 						 const std::vector<tng::JSONValue>& pValues);
+
+		//
+		// manages nested arrays proeperly;
+		//
+		void manageNestedArrays(std::string_view pKey, nlohmann::json& pData, const std::vector<std::vector<JSONValue>>& pValue);
+
 
 	private:
 		JSONObject mJSONObject;
