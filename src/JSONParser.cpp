@@ -431,7 +431,10 @@ namespace tng
 			pArray.find('[') != std::string::npos)
 		{
 			currentCounterBraces++;
-			pArray.erase(pArray.size() - 2, 1);
+			if(pArray[pArray.size() - 1] == '\n')
+				pArray.erase(pArray.size() - 2, 1);
+			else
+				pArray.erase(pArray.size() - 1, 1);
 			pArray.erase(0, 1);
 		}
 		else
@@ -450,13 +453,13 @@ namespace tng
 					uint32_t startSubArray{}, endSubArray{};
 					startSubArray = pArray.find('[');
 					endSubArray = pArray.find(']');
-					std::string subArray = pArray.substr(startSubArray, endSubArray);
+					std::string subArray = pArray.substr(startSubArray, endSubArray + 1);
 					if (subArray.find_last_of('\n') != std::string::npos)
 						subArray.erase(subArray.size() - 1, 1);
 					currentCounterBraces--;
 					addArray(pKey, subArray, pObject);
 					currentCounterBraces++;
-					start = endSubArray + 1;
+					pArray.erase(0, endSubArray + 2);
 					continue;
 				}
 				if (std::any_of(element.begin(), element.end(), [](char pChar) { return std::isdigit(pChar); }))
@@ -473,7 +476,12 @@ namespace tng
 			if (element.find_last_of('\n') != std::string::npos)
 				element.erase(element.size() - 1, 1);
 			if (!element.empty())
-				mHelperStorage.emplace_back(tng::JSONValue(std::string(element)));
+			{
+				if (std::any_of(element.begin(), element.end(), [](char pChar) { return std::isdigit(pChar); }))
+					addNumber(element, mHelperStorage);
+				else
+					mHelperStorage.emplace_back(tng::JSONValue(std::string(element)));
+			}
 		}
 
 		if (currentCounterBraces == counterBraces)
@@ -537,20 +545,7 @@ namespace tng
 		{
 			for (auto& [key, value] : object.getStorage())
 			{
-				if (value.valueIsArray())
-					manageArray(key, jsonData, value.getArray());
-				else if (value.valueIsNestedArray())
-					manageNestedArrays(key, jsonData, value.getNestedArray());
-				else if (value.valueIsBool())
-					jsonData[key] = value.getBool();
-				else if (value.valueIsFloat())
-					jsonData[key] = value.getFloat();
-				else if (value.valueIsUint())
-					jsonData[key] = value.getUint();
-				else if (value.valueIsInt())
-					jsonData[key] = value.getInt();
-				else if (value.valueIsString())
-					jsonData[key] = value.getString();
+				jsonData[key] = valueToJson(value);
 			}
 		}
 		catch (const nlohmann::json::exception& ex)
@@ -660,38 +655,41 @@ namespace tng
 		pObject = tmpObject;
 	}
 
-	void JSONParser::manageArray(std::string_view pKey, nlohmann::json& pData, 
-								 const std::vector<tng::JSONValue>& pValues)
+	nlohmann::json JSONParser::valueToJson(const JSONValue& pValue)
 	{
-		for (auto& value : pValues)
+		if (pValue.valueIsArray())
 		{
-			if (value.valueIsArray())
+			nlohmann::json tmpData = nlohmann::json::array();
+			for (auto& i : pValue.getArray())
 			{
-				std::initializer_list<JSONValue> values;
-				/*for (auto& i : value.getArray())
-				{
-					pData[pKey].push_back(value.getArray());
-				}*/
+				tmpData.push_back(valueToJson(i));
 			}
-			else if (value.valueIsBool())
-				pData[pKey] += value.getBool();
-			else if (value.valueIsFloat())
-				pData[pKey] += value.getFloat();
-			else if (value.valueIsUint())
-				pData[pKey] += value.getUint();
-			else if (value.valueIsInt())
-				pData[pKey] += value.getInt();
-			else if (value.valueIsString())
-				pData[pKey] += value.getString();
+			return tmpData;
 		}
-	}
-
-	void JSONParser::manageNestedArrays(std::string_view pKey, nlohmann::json& pData, const std::vector<std::vector<JSONValue>>& pValue)
-	{	
-		for (auto& i : pValue)
+		else if (pValue.valueIsNestedArray())
 		{
-			manageArray(pKey, pData, i);
+			nlohmann::json tmpData = nlohmann::json::array();
+			for (auto& array : pValue.getNestedArray())
+			{
+				for (auto& index : array)
+				{
+					tmpData.push_back(valueToJson(index));
+				}
+			}
+			return tmpData;
 		}
+		else if (pValue.valueIsBool())
+			return pValue.getBool();
+		else if (pValue.valueIsFloat())
+			return pValue.getFloat();
+		else if (pValue.valueIsInt())
+			return pValue.getInt();
+		else if (pValue.valueIsString())
+			return pValue.getString();
+		else if (pValue.valueIsUint())
+			return pValue.getUint();
+
+		return nlohmann::json::object();
 	}
 
 	void JSONParser::openReadStream(const std::filesystem::path& pPath, std::ifstream& pIfstream)
@@ -931,6 +929,20 @@ namespace tng
 			mInput.push_back('}');
 	}
 
+	std::expected<char, std::string_view> JSONLexer::isSpecialSymbol(char pSymbol)
+	{
+		std::unordered_set<char> symbols =
+		{
+			'!', '?', '@', '#', '$', '%', '^', '&', '*', '(', ')',
+			'_', '=', '|', ';', '<', '>', '/', '~', '`'
+		};
+		
+		if (symbols.contains(pSymbol))
+			return pSymbol;
+		else
+			return std::unexpected("There is no such a symbol!\n");
+	}
+
 	void JSONLexer::error(std::string_view pMessage)
 	{
 		std::string errorMsg = std::format("Error! [MESSAGE] {} [CURRENT_POS_STRING] {}\n", pMessage, mCurrentPosInput);
@@ -996,16 +1008,22 @@ namespace tng
 		case '.': parseNumber(c); break;
 		case '"': parseString(); break;
 		case 't':
-			if(mInput[mCurrentPosInput] == 'r')
-				parseKeyword("true"); 
+			if (mInput[mCurrentPosInput] == 'r')
+				parseKeyword("true");
+			else
+				parseString();
 			break;
 		case 'f': 
 			if(mInput[mCurrentPosInput] == 'a')
 				parseKeyword("false");
+			else
+				parseString();
 			break;
 		case 'n': 
 			if(mInput[mCurrentPosInput] == 'u')
 				parseKeyword("null"); 
+			else
+				parseString();
 			break;
 		case ' ': addToken(TokenType::SPACE, " "); break;
 		case '\n': parseEscapeSequence(c); break;
@@ -1024,8 +1042,13 @@ namespace tng
 		case '\r': parseEscapeSequence(c); break;
 		case '\0': addToken(TokenType::RBRACE, "}"); break;
 		default:
-			inverseAdvance();
-			parseString();
+			if (isSpecialSymbol(c).has_value())
+				addToken(TokenType::STRING, c);
+			else
+			{
+				inverseAdvance();
+				parseString();
+			}
 		}
 	}
 
@@ -1089,6 +1112,14 @@ namespace tng
 		JSONLexer::Token tmpToken;
 		tmpToken.mTokenType = pTokenType;
 		tmpToken.mDefinition = pDefinition;
+		mTokens.push_back(tmpToken);
+	}
+
+	void JSONLexer::addToken(TokenType pTokenType, char pCharDefinition)
+	{
+		JSONLexer::Token tmpToken;
+		tmpToken.mTokenType = pTokenType;
+		tmpToken.mDefinition.push_back(pCharDefinition);
 		mTokens.push_back(tmpToken);
 	}
 
