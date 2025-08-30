@@ -10,6 +10,7 @@
 #include <type_traits>
 #include <variant>
 #include <optional>
+#include <expected>
 
 #if __has_include("JSON/json.hpp")
 	#define USE_JSON_LIBRARY 1
@@ -333,6 +334,7 @@ namespace tng
 		// automatically adds a token into storage of tokens;
 		//
 		void addToken(TokenType pTokenType, std::string_view pDefinition);
+		void addToken(TokenType pTokenType, char pCharDefinition);
 
 		//
 		// checks if the beginning of the text is left brace and the end is right brace;
@@ -364,6 +366,11 @@ namespace tng
 		// if it doesnt have - does nothing;
 		//
 		void analyzerBraces();
+
+		//
+		// checks if the current symbol is special, like "!, ?, $" and so on;
+		//
+		std::expected<char, std::string_view> isSpecialSymbol(char pSymbol);
 
 		//
 		// just a simplified log-function;
@@ -614,16 +621,9 @@ namespace tng
 		void repairObject(tng::JSONObject& pObject);
 
 		//
-		// manages array properly. arrays are made with recursion for convenience;
+		// converts JSONValue into a json value;
 		//
-		void manageArray(std::string_view pKey, nlohmann::json& pData, 
-						 const std::vector<tng::JSONValue>& pValues);
-
-		//
-		// manages nested arrays proeperly;
-		//
-		void manageNestedArrays(std::string_view pKey, nlohmann::json& pData, const std::vector<std::vector<JSONValue>>& pValue);
-
+		nlohmann::json valueToJson(const JSONValue& pValue);
 
 	private:
 		JSONObject mJSONObject;
