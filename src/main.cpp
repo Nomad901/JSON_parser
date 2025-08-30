@@ -2,13 +2,20 @@
 
 #include "JSONParser.h"
 
-// TODO: everything works already, parser parses and does the proper thing. the main thing which i need to do further: parse arrays
+// TODO: nested arrays and nested hierarchy 
 
 int main(int argc, char* argv[])
 {
-	std::string string = "{text: cool\n smth: cool again u know?\n yeah, i think so: 232}";
+	std::string string = "{bool: true\n array: [1,null,test]\n nested: {blah: false\n blahblah: 3.14}\n unicode: \\u2764}";
+	std::string string2 = "{smth: 32\n smth_nested: {bool: true\n data: 32}}";
 	tng::JSONParser parser;
-	nlohmann::json data = parser.parseToJSON(string);
+	nlohmann::json data = parser.parseToJSON(string2);
+	//nlohmann::json data = nlohmann::json::object();
+	//nlohmann::json nestedData = nlohmann::json::object();
+	//nestedData["bool"] = true;
+	//nestedData["cool"] = 32;
+	//data["smth"] = 32;
+	//data["smth_nested"] = nestedData;
 
 	std::string resourcePath = RESOURCES_PATH;
 	std::ofstream ofstream(resourcePath + "smthCool.json");
